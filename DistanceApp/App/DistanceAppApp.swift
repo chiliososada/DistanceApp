@@ -1,8 +1,6 @@
 //
-//  DistanceAppApp.swift
+//  DistanceApp.swift
 //  DistanceApp
-//
-//  Created by toyousoft on 2025/03/03.
 //
 
 import SwiftUI
@@ -12,43 +10,58 @@ struct DistanceApp: App {
     // 使用环境对象管理全局状态和依赖
     @StateObject private var environment = AppEnvironment.shared
     
+    // 观察应用程序生命周期
+    @Environment(\.scenePhase) private var scenePhase
+    
     var body: some Scene {
         WindowGroup {
-            ZStack {
-                if !environment.isInitialized {
-                    // 初始加载视图
-                    LoadingView(message: "正在加载...")
-                        .task {
-                            await environment.initialize()
-                        }
-                } else if environment.isAuthenticated {
-                    // 已认证：主应用界面
-                    MainContentView()
-                        .environmentObject(environment)
-                        .environmentObject(environment.navigationManager as! AppNavigationManager)
-                        .environmentObject(environment.authManager as! AuthManager)
-                } else {
-                    // 未认证：认证流程
-                    AuthenticationFlowView()
-                        .environmentObject(environment)
-                        .environmentObject(environment.navigationManager as! AppNavigationManager)
-                        .environmentObject(environment.authManager as! AuthManager)
-                }
+            ContentView()
+                .environmentObject(environment)
+        }
+        .onChange(of: scenePhase) { newPhase in
+            switch newPhase {
+            case .active:
+                // 应用变为活跃状态时检查会话
+                checkSession()
+                
+                // 更新用户活跃状态
+                updateUserActiveStatus(true)
+                
+            case .inactive:
+                // 应用变为非活跃状态
+                updateUserActiveStatus(false)
+                
+            case .background:
+                // 应用进入后台
+                Logger.info("应用进入后台")
+                
+            @unknown default:
+                break
             }
-            .preferredColorScheme(environment.systemTheme)
         }
     }
-}
-
-// 视图代码暂不提供完整实现
-struct MainContentView: View {
-    var body: some View {
-        Text("主内容区域")
+    
+    // 检查会话状态
+    private func checkSession() {
+        Logger.info("检查会话状态")
+        Task {
+            do {
+                let isValid = try await environment.authManager.validateCurrentSession()
+                Logger.info("会话状态: \(isValid ? "有效" : "无效")")
+            } catch {
+                Logger.error("会话检查失败: \(error.localizedDescription)")
+            }
+        }
     }
-}
-
-struct AuthenticationFlowView: View {
-    var body: some View {
-        Text("认证流程")
+    
+    // 更新用户活跃状态
+    private func updateUserActiveStatus(_ isActive: Bool) {
+        Task {
+            do {
+                try await environment.authManager.updateUserActiveStatus(isActive)
+            } catch {
+                Logger.error("更新用户活跃状态失败: \(error.localizedDescription)")
+            }
+        }
     }
 }

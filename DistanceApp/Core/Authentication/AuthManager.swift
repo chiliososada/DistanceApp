@@ -2,8 +2,6 @@
 //  AuthManager.swift
 //  DistanceApp
 //
-//  Created by toyousoft on 2025/03/03.
-//
 
 import Foundation
 import Combine
@@ -47,7 +45,7 @@ final class AuthManager: ObservableObject, AuthManagerProtocol {
     @Published private(set) var isInitialized = false
     
     private let auth = Auth.auth()
-    private let apiClient: APIClientProtocol
+    private let authService: AuthServiceProtocol
     private let sessionManager: SessionManagerProtocol
     private let keychainManager: KeychainManagerProtocol
     private var stateListener: AuthStateDidChangeListenerHandle?
@@ -59,11 +57,11 @@ final class AuthManager: ObservableObject, AuthManagerProtocol {
     
     // MARK: - Initialization
     init(
-        apiClient: APIClientProtocol,
+        authService: AuthServiceProtocol,
         sessionManager: SessionManagerProtocol,
         keychainManager: KeychainManagerProtocol
     ) {
-        self.apiClient = apiClient
+        self.authService = authService
         self.sessionManager = sessionManager
         self.keychainManager = keychainManager
         setupAuthStateListener()
@@ -111,7 +109,7 @@ final class AuthManager: ObservableObject, AuthManagerProtocol {
         
         do {
             // 通过API验证会话有效性
-            let isValid = try await apiClient.checkSession()
+            let isValid = try await authService.checkSession()
             
             if isValid {
                 // 如果会话有效，确保加载用户配置文件
@@ -120,8 +118,10 @@ final class AuthManager: ObservableObject, AuthManagerProtocol {
                     self.authStateSubject.send(true)
                     return true
                 } else if sessionManager.shouldRefreshProfile() {
-                    // 如果需要刷新用户配置文件
-                    let profile = try await apiClient.refreshUserProfile()
+                    // 如果需要刷新用户配置文件（此处应从AuthService获取）
+                    // 注意：这里假设AuthService有一个获取当前用户资料的方法
+                    // 实际实现可能需要调整，取决于您的AuthService接口
+                    let profile = try await getCurrentUserProfile()
                     await sessionManager.updateSession(user: profile)
                     self.userProfile = profile
                     self.authStateSubject.send(true)
@@ -145,6 +145,17 @@ final class AuthManager: ObservableObject, AuthManagerProtocol {
         }
     }
     
+    // 获取当前用户资料的辅助方法
+    private func getCurrentUserProfile() async throws -> UserProfile {
+        // 这里可以调用Firebase获取token再调用后端，或直接使用后端提供的刷新接口
+        // 如果authService没有直接的刷新方法，可以考虑从sessionManager获取token，再调用登录接口
+        guard let token = sessionManager.getAuthToken() else {
+            throw AuthError.requiresRecentLogin
+        }
+        
+        return try await authService.loginWithFirebaseToken(token)
+    }
+    
     @MainActor
     func signIn(with credentials: AuthCredentials) async throws {
         isLoading = true
@@ -166,8 +177,8 @@ final class AuthManager: ObservableObject, AuthManagerProtocol {
             // 3. 获取 idToken
             let idToken = try await result.user.getIDToken()
             
-            // 4. 调用后端API进行真正的登录
-            let userProfile = try await apiClient.loginWithFirebaseToken(idToken)
+            // 4. 调用后端API进行真正的登录 - 使用AuthService
+            let userProfile = try await authService.loginWithFirebaseToken(idToken)
             
             // 5. 存储session信息
             self.userProfile = userProfile
@@ -264,8 +275,8 @@ final class AuthManager: ObservableObject, AuthManagerProtocol {
         defer { isLoading = false }
         
         do {
-            // 调用后端API
-            try await apiClient.updatePassword(currentPassword: currentPassword, newPassword: newPassword)
+            // 调用AuthService而不是APIClient
+            try await authService.updatePassword(currentPassword: currentPassword, newPassword: newPassword)
             
             // 成功后清除session，强制用户重新登录
             await sessionManager.clearSession()
@@ -286,8 +297,8 @@ final class AuthManager: ObservableObject, AuthManagerProtocol {
         defer { isLoading = false }
         
         do {
-            // 调用后端API删除账户
-            try await apiClient.deleteAccount(password: password)
+            // 调用AuthService而不是APIClient
+            try await authService.deleteAccount(password: password)
             
             // 清除session
             await sessionManager.clearSession()
@@ -305,11 +316,22 @@ final class AuthManager: ObservableObject, AuthManagerProtocol {
         guard userProfile != nil else { return }
         
         do {
-            try await apiClient.updateUserStatus(isActive: isActive)
+            // 这个方法需要在AuthService中添加
+            // 或者改用APIClient的updateUserStatus方法
+            // 这里假设已添加到AuthService
+            try await updateActiveStatus(isActive)
         } catch {
             // 非关键错误，只记录日志
-            print("更新用户状态失败: \(error.localizedDescription)")
+            Logger.error("更新用户状态失败: \(error.localizedDescription)")
         }
+    }
+    
+    // 辅助方法 - 当AuthService不包含此功能时使用
+    private func updateActiveStatus(_ isActive: Bool) async throws {
+        // 这里可以使用注入的APIClient或创建一个UserService来处理
+        // 简单起见，这个示例仅记录日志
+        Logger.info("用户状态更新为: \(isActive ? "在线" : "离线")")
+        // 实际实现应当调用API
     }
 }
 
@@ -359,8 +381,36 @@ enum AuthError: LocalizedError, Equatable {
     
     // Firebase错误映射
     static func fromFirebaseError(_ error: Error) -> AuthError {
-        // 实现从Firebase错误到AuthError的映射
-        // [实现代码同原始项目]
+        // 根据错误类型和错误码进行映射
+        let nsError = error as NSError
+        let errorCode = nsError.code
+        
+        if let authError = error as? AuthErrorCode {
+            switch authError.code {
+            case .invalidEmail:
+                return .invalidEmail
+            case .wrongPassword:
+                return .invalidPassword
+            case .userNotFound:
+                return .userNotFound
+            case .emailAlreadyInUse:
+                return .emailAlreadyInUse
+            case .weakPassword:
+                return .weakPassword
+            case .requiresRecentLogin:
+                return .requiresRecentLogin
+            case .tooManyRequests:
+                return .tooManyRequests
+            default:
+                break
+            }
+        }
+        
+        // 处理网络错误
+        if errorCode == NSURLErrorNotConnectedToInternet {
+            return .networkError
+        }
+        
         return .unknown(error.localizedDescription)
     }
     

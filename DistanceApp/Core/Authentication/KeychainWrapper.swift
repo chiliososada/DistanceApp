@@ -46,14 +46,13 @@ final class KeychainWrapper: KeychainWrapperProtocol {
     
     // MARK: - Initialization
     init(service: String = "com.distance.app.keychain", accessGroup: String? = nil) {
-        var keychain = Keychain(service: service)
-            .accessibility(.afterFirstUnlock)
-        
         if let accessGroup = accessGroup {
-            keychain = keychain.accessGroup(accessGroup)
+            self.keychain = Keychain(service: service, accessGroup: accessGroup)
+                .accessibility(.afterFirstUnlock)
+        } else {
+            self.keychain = Keychain(service: service)
+                .accessibility(.afterFirstUnlock)
         }
-        
-        self.keychain = keychain
     }
     
     // MARK: - String Methods

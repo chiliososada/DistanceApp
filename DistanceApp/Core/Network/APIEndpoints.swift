@@ -2,11 +2,8 @@
 //  APIEndpoints.swift
 //  DistanceApp
 //
-//  Created by toyousoft on 2025/03/03.
-//
 
 import Foundation
-import MapKit
 
 // MARK: - HTTP Method Enum
 enum HTTPMethod: String {
@@ -25,23 +22,6 @@ enum APIEndpoint {
     case updatePassword(currentPassword: String, newPassword: String)
     case deleteAccount(password: String)
     case checkSession
-    case refreshUserProfile
-    
-    // User Endpoints
-    case updateUserStatus(isActive: Bool)
-    case updateUserProfile(UserProfile)
-    
-    // Content Endpoints
-    case postLocation(LocationPost.Draft)
-    case fetchPosts(region: MKCoordinateRegion)
-    case getPost(id: String)
-    case savePost(id: String)
-    case unsavePost(id: String)
-    
-    // Chat Endpoints
-    case getConversations
-    case getMessages(conversationId: String, page: Int, pageSize: Int)
-    case sendMessage(conversationId: String, content: String)
     
     // MARK: - HTTP Headers
     var headers: [String: String] {
@@ -52,13 +32,13 @@ enum APIEndpoint {
     // MARK: - HTTP Method
     var method: HTTPMethod {
         switch self {
-        case .checkSession, .refreshUserProfile, .getPost, .fetchPosts, .getConversations, .getMessages:
+        case .checkSession:
             return .get
-        case .register, .login, .loginWithFirebaseToken, .postLocation, .sendMessage:
+        case .register, .login, .loginWithFirebaseToken:
             return .post
-        case .updatePassword, .updateUserStatus, .updateUserProfile, .savePost:
+        case .updatePassword:
             return .put
-        case .deleteAccount, .unsavePost:
+        case .deleteAccount:
             return .delete
         }
     }
@@ -79,34 +59,6 @@ enum APIEndpoint {
             return "/api/v1/auth/account"
         case .checkSession:
             return "/api/v1/auth/session"
-        case .refreshUserProfile:
-            return "/api/v1/auth/profile"
-            
-        // User Paths
-        case .updateUserStatus:
-            return "/api/v1/users/status"
-        case .updateUserProfile:
-            return "/api/v1/users/profile"
-            
-        // Content Paths
-        case .postLocation:
-            return "/api/v1/posts"
-        case .fetchPosts:
-            return "/api/v1/posts/nearby"
-        case .getPost(let id):
-            return "/api/v1/posts/\(id)"
-        case .savePost(let id):
-            return "/api/v1/posts/\(id)/save"
-        case .unsavePost(let id):
-            return "/api/v1/posts/\(id)/save"
-            
-        // Chat Paths
-        case .getConversations:
-            return "/api/v1/chats"
-        case .getMessages(let conversationId, _, _):
-            return "/api/v1/chats/\(conversationId)/messages"
-        case .sendMessage(let conversationId, _):
-            return "/api/v1/chats/\(conversationId)/messages"
         }
     }
     
@@ -128,40 +80,7 @@ enum APIEndpoint {
         case .deleteAccount(let password):
             return ["password": password]
             
-        case .updateUserStatus(let isActive):
-            return ["is_active": isActive]
-            
-        case .updateUserProfile(let profile):
-            return profile
-            
-        case .postLocation(let draft):
-            return draft
-            
-        case .fetchPosts(let region):
-            return [
-                "latitude": region.center.latitude,
-                "longitude": region.center.longitude,
-                "latitude_delta": region.span.latitudeDelta,
-                "longitude_delta": region.span.longitudeDelta
-            ]
-            
-        case .sendMessage(_, let content):
-            return ["content": content]
-            
-        case .getMessages(_, let page, let pageSize):
-            return ["page": page, "page_size": pageSize]
-            
-        case .checkSession, .refreshUserProfile, .getPost, .getConversations, .savePost, .unsavePost:
-            return nil
-        }
-    }
-    
-    // MARK: - Query Parameters
-    var queryParameters: [String: String]? {
-        switch self {
-        case .getMessages(_, let page, let pageSize):
-            return ["page": "\(page)", "page_size": "\(pageSize)"]
-        default:
+        case .checkSession:
             return nil
         }
     }

@@ -4,6 +4,13 @@
 //
 //  Created by toyousoft on 2025/03/03.
 //
+/// 应用程序全局环境，管理依赖注入和全局状态
+//
+//  AppEnvironment.swift
+//  DistanceApp
+//
+//  Created by toyousoft on 2025/03/03.
+//
 
 import SwiftUI
 import Combine
@@ -14,6 +21,7 @@ final class AppEnvironment: ObservableObject {
     static let shared = AppEnvironment()
     
     // MARK: - Services
+    let authService: AuthServiceProtocol
     let authManager: AuthManagerProtocol
     let sessionManager: SessionManagerProtocol
     let navigationManager: NavigationManagerProtocol
@@ -48,10 +56,11 @@ final class AppEnvironment: ObservableObject {
             baseURL: AppConfig.apiBaseURL
         )
         
+        self.authService = AuthService(apiClient: apiClient)
         self.navigationManager = AppNavigationManager()
         
         self.authManager = AuthManager(
-            apiClient: apiClient,
+            authService: authService,
             sessionManager: sessionManager,
             keychainManager: keychainManager
         )
@@ -114,3 +123,5 @@ extension AppEnvironment {
     }
 }
 #endif
+
+

@@ -2,6 +2,52 @@
 //  AppRoute.swift
 //  DistanceApp
 //
-//  Created by toyousoft on 2025/03/03.
-//
 
+import Foundation
+
+/// 应用程序导航路由
+enum AppRoute: Hashable {
+    // 认证相关路由
+    case login
+    case register
+    case forgotPassword
+    case verifyEmail
+    
+    // 主要功能路由 - 可以根据需要扩展
+    case home
+    case profile
+    case settings
+    
+    // 设置相关路由
+    case changePassword
+    case accountSettings
+    case deleteAccount
+}
+
+// 路由标题扩展
+extension AppRoute {
+    var title: String {
+        switch self {
+        case .login:
+            return "登录"
+        case .register:
+            return "注册"
+        case .forgotPassword:
+            return "找回密码"
+        case .verifyEmail:
+            return "验证邮箱"
+        case .home:
+            return "首页"
+        case .profile:
+            return "个人资料"
+        case .settings:
+            return "设置"
+        case .changePassword:
+            return "修改密码"
+        case .accountSettings:
+            return "账户设置"
+        case .deleteAccount:
+            return "删除账户"
+        }
+    }
+}
