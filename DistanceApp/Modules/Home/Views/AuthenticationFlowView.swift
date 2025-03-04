@@ -15,11 +15,13 @@ import SwiftUI
 struct AuthenticationFlowView: View {
     // 环境对象
     @EnvironmentObject private var navigationManager: AppNavigationManager
+    @EnvironmentObject private var authManager: AuthManager  // 添加这一行
     
     var body: some View {
         NavigationStack(path: $navigationManager.navigationPath) {
             // 登录视图作为认证流程的起点
             LoginView()
+                .environmentObject(authManager)  // 添加这一行，确保传递authManager
                 .navigationDestination(for: AppRoute.self) { route in
                     // 处理认证流程导航
                     switch route {

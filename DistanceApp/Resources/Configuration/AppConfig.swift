@@ -11,7 +11,7 @@ import Foundation
 /// 应用程序全局配置
 struct AppConfig {
     // MARK: - API Configuration
-    static let apiBaseURL = "https://api.distance.example.com"
+    static let apiBaseURL = "https://192.168.0.9:52340"
     static let apiVersion = "v1"
     
     // MARK: - App Settings

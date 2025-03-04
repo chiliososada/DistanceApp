@@ -81,16 +81,15 @@ struct LoginView: View {
             }
             
             // 登录按钮
-            Button(action: login) {
-                if authManager.isLoading {
-                    ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle())
-                        .foregroundColor(.white)
-                } else {
-                    Text("登录")
-                        .fontWeight(.bold)
-                        .foregroundColor(.white)
-                }
+            Button {
+                print("登录按钮点击")
+                login()
+            } label: {
+                Text("登录")
+                    .fontWeight(.bold)
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding()
             }
             .frame(maxWidth: .infinity)
             .padding()
