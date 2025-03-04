@@ -44,7 +44,11 @@ final class AuthService: AuthServiceProtocol {
             createdAt: Date(),
             lastSeen: Date(),
             authToken: authData.chatToken,
-            csrfToken: authData.csrfToken
+            csrfToken: authData.csrfToken,
+            gender: authData.gender,
+            bio: authData.bio,
+            chatID: authData.chatID,
+            chatUrl: authData.chatUrl
         )
     }
     
@@ -77,6 +81,11 @@ struct AuthData: Codable {
     let displayName: String
     let photoUrl: String?
     let email: String
+    let gender: String?
+    let bio: String?
+    let session: String?
+    let chatID: [String]?
+    let chatUrl: String?
     
     enum CodingKeys: String, CodingKey {
         case csrfToken = "csrf_token"
@@ -85,9 +94,13 @@ struct AuthData: Codable {
         case displayName = "display_name"
         case photoUrl = "photo_url"
         case email = "email"
+        case gender = "gender"
+        case bio = "bio"
+        case session = "session"
+        case chatID = "chat_id"
+        case chatUrl = "chat_url"
     }
 }
-
 struct SessionStatus: Codable {
     let isValid: Bool
     let message: String?
