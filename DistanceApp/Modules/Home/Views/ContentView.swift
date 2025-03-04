@@ -30,8 +30,6 @@ struct ContentView: View {
             } else {
                 // 未认证：认证流程
                 AuthenticationFlowView()
-//                    .environmentObject(environment.navigationManager as! AppNavigationManager)
-//                    .environmentObject(environment.authManager as! AuthManager)
             }
         }
         .preferredColorScheme(environment.systemTheme)

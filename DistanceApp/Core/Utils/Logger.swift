@@ -82,12 +82,13 @@ final class Logger {
         // 构建日志消息
         let logMessage = "[\(timestamp)] [\(levelString(for: level))] [\(filename):\(line)] \(function): \(message)"
         
-        // 输出日志
-        #if DEBUG
-        print(logMessage)
-        #endif
+        // 选择其中一种输出方式：
         
-        // 使用OSLog记录
+        #if DEBUG
+        // 方式1: 只使用控制台输出
+        print(logMessage)
+        #else
+        // 方式2: 只使用OSLog (生产环境)
         switch level {
         case .debug:
             os_log(.debug, log: osLog, "%{public}@", logMessage)
@@ -100,6 +101,7 @@ final class Logger {
         case .critical:
             os_log(.fault, log: osLog, "%{public}@", logMessage)
         }
+        #endif
     }
     
     private static func levelString(for level: LogLevel) -> String {

@@ -85,7 +85,7 @@ final class AppEnvironment: ObservableObject {
         do {
             // 检查是否有有效会话
             let isSessionValid = try await authManager.validateCurrentSession()
-            
+            Logger.error("环境初始validateCurrentSession")
             await MainActor.run {
                 self.isAuthenticated = isSessionValid
                 self.isInitialized = true

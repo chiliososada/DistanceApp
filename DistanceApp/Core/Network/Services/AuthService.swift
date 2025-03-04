@@ -49,9 +49,10 @@ final class AuthService: AuthServiceProtocol {
     
     func checkSession() async throws -> Bool {
         do {
-            // 同样使用包装响应
             let response: APIResponse<SessionStatus> = try await apiClient.request(.checkSession)
-            return response.data.isValid
+            
+            // 如果成功解析并且uid不为空，则认为会话有效
+            return response.code == 0 && !response.data.uid.isEmpty
         } catch APIError.unauthorized {
             return false
         } catch {
@@ -103,6 +104,28 @@ struct AuthData: Codable {
 }
 
 struct SessionStatus: Codable {
-    let isValid: Bool
-    let message: String?
+    // 使用与API响应匹配的字段
+    let csrfToken: String
+    let chatToken: String
+    let uid: String
+    let displayName: String
+    let photoUrl: String?
+    let email: String
+    let gender: String?
+    let bio: String?
+    let chatID: [String]?
+    let chatUrl: String?
+    
+    enum CodingKeys: String, CodingKey {
+        case csrfToken = "csrf_token"
+        case chatToken = "chat_token"
+        case uid
+        case displayName = "display_name"
+        case photoUrl = "photo_url"
+        case email
+        case gender
+        case bio
+        case chatID = "chat_id"
+        case chatUrl = "chat_url"
+    }
 }
