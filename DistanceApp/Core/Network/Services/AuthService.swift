@@ -2,13 +2,6 @@
 //  AuthService.swift
 //  DistanceApp
 //
-//  Created by toyousoft on 2025/03/03.
-//
-
-//
-//  AuthService.swift
-//  DistanceApp
-//
 
 import Foundation
 
@@ -33,9 +26,11 @@ final class AuthService: AuthServiceProtocol {
     // MARK: - Auth Methods
     func loginWithFirebaseToken(_ idToken: String) async throws -> UserProfile {
         let endpoint = APIEndpoint.loginWithFirebaseToken(idToken: idToken)
-        let authData: AuthData = try await apiClient.request(endpoint)
+        // 使用包装类型接收响应
+        let response: APIResponse<AuthData> = try await apiClient.request(endpoint)
+        let authData = response.data
         
-        // 创建用户配置文件 - 业务逻辑移到这里
+        // 创建用户配置文件
         return UserProfile(
             id: authData.uid,
             displayName: authData.displayName,
@@ -54,8 +49,9 @@ final class AuthService: AuthServiceProtocol {
     
     func checkSession() async throws -> Bool {
         do {
-            let response: SessionStatus = try await apiClient.request(.checkSession)
-            return response.isValid
+            // 同样使用包装响应
+            let response: APIResponse<SessionStatus> = try await apiClient.request(.checkSession)
+            return response.data.isValid
         } catch APIError.unauthorized {
             return false
         } catch {
@@ -65,12 +61,16 @@ final class AuthService: AuthServiceProtocol {
     }
     
     func updatePassword(currentPassword: String, newPassword: String) async throws {
-        try await apiClient.request(.updatePassword(currentPassword: currentPassword, newPassword: newPassword))
+        // 对于不需要返回数据的请求，使用包装一个空响应
+        let _: APIResponse<EmptyResponse> = try await apiClient.request(.updatePassword(currentPassword: currentPassword, newPassword: newPassword))
     }
     
     func deleteAccount(password: String) async throws {
-        try await apiClient.request(.deleteAccount(password: password))
+        let _: APIResponse<EmptyResponse> = try await apiClient.request(.deleteAccount(password: password))
     }
+    
+    // MARK: - 空响应模型
+    private struct EmptyResponse: Codable {}
 }
 
 // MARK: - Auth Data Models
@@ -101,6 +101,7 @@ struct AuthData: Codable {
         case chatUrl = "chat_url"
     }
 }
+
 struct SessionStatus: Codable {
     let isValid: Bool
     let message: String?

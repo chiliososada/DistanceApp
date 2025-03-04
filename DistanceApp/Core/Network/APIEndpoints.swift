@@ -58,7 +58,7 @@ enum APIEndpoint {
         case .deleteAccount:
             return "/api/v1/auth/account"
         case .checkSession:
-            return "/api/v1/auth/session"
+            return "/api/v1/auth/checksession"
         }
     }
     

@@ -20,7 +20,7 @@ final class APIClient: APIClientProtocol {
     private let sessionManager: SessionManagerProtocol
     private let timeoutInterval: TimeInterval = 30
     private let maxRetries = 2
-    
+    private let urlSession: URLSession
     // MARK: - 空响应
     private struct EmptyResponse: Codable {}
     
@@ -31,6 +31,8 @@ final class APIClient: APIClientProtocol {
     ) {
         self.sessionManager = sessionManager
         self.baseURL = baseURL
+        let config = URLSessionConfiguration.default
+        self.urlSession = URLSession(configuration: config)
     }
     
     // MARK: - Public Methods
@@ -47,7 +49,7 @@ final class APIClient: APIClientProtocol {
         let request = try prepareRequest(for: endpoint)
         
         do {
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await urlSession.data(for: request)
             
             // 调试日志
             logResponse(data: data, response: response)
@@ -74,12 +76,14 @@ final class APIClient: APIClientProtocol {
         guard let url = URL(string: baseURL + endpoint.path) else {
             throw APIError.invalidURL
         }
-        
+        // 检查Cookie是否存在
+        //Logger.debug("当前存储的所有Cookie: \(HTTPCookieStorage.shared.cookies?.map { "\($0.name)=\($0.value)" } ?? [])")
         var request = URLRequest(url: url)
         request.httpMethod = endpoint.method.rawValue
         request.allHTTPHeaderFields = endpoint.headers
         request.timeoutInterval = timeoutInterval
-        
+        request.httpShouldHandleCookies = true
+        request.mainDocumentURL = URL(string: baseURL)
         // 添加认证令牌
         if let token = sessionManager.getAuthToken() {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -135,6 +139,10 @@ final class APIClient: APIClientProtocol {
         
         if let httpResponse = response as? HTTPURLResponse {
             Logger.debug("HTTP Status Code: \(httpResponse.statusCode)")
+        }
+        
+        if let httpResponse = response as? HTTPURLResponse {
+            Logger.debug("allHeaderFields: \(httpResponse.allHeaderFields)")
         }
         #endif
     }
