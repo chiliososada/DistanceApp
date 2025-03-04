@@ -23,6 +23,8 @@ struct DistanceApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(environment)
+                .environmentObject(environment.authManager as! AuthManager)
+                .environmentObject(environment.navigationManager as! AppNavigationManager)
         }
         .onChange(of: scenePhase) { oldPhase, newPhase in
             switch newPhase {

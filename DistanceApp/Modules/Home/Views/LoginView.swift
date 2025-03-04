@@ -16,7 +16,7 @@ struct LoginView: View {
     // 环境对象
     @EnvironmentObject private var authManager: AuthManager
     @EnvironmentObject private var navigationManager: AppNavigationManager
-    
+    @State private var errorMessage: String = ""
     // 状态变量
     @State private var email = ""
     @State private var password = ""
@@ -184,15 +184,33 @@ struct LoginView: View {
     
     // MARK: - 登录方法
     private func login() {
+        Logger.debug("登录按钮被点击")
+        errorMessage = ""
+        
+        // 检查表单是否有效
+        guard isFormValid else {
+            errorMessage = "请输入邮箱和密码"
+            return
+        }
+        
         Task {
             do {
+                Logger.debug("开始登录流程 - 邮箱: \(email)")
                 try await authManager.signIn(with: AuthCredentials(
                     email: email,
                     password: password
                 ))
-                // 登录成功后不需要操作，AppEnvironment会自动切换视图
+                Logger.debug("登录成功")
+            } catch let error as AuthError {
+                await MainActor.run {
+                    errorMessage = error.errorDescription ?? "登录失败"
+                    Logger.error("登录失败: \(errorMessage)")
+                }
             } catch {
-                // 错误已在AuthManager中处理
+                await MainActor.run {
+                    errorMessage = "登录失败: \(error.localizedDescription)"
+                    Logger.error("未知错误: \(error.localizedDescription)")
+                }
             }
         }
     }

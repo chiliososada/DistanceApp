@@ -50,7 +50,7 @@ enum APIEndpoint {
         case .loginWithFirebaseToken:
             return "/api/v1/auth/firebase"
         case .login:
-            return "/api/v1/auth/login"
+            return "/api/v1/login"
         case .register:
             return "/api/v1/auth/register"
         case .updatePassword:
