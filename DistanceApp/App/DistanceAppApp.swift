@@ -10,6 +10,12 @@ struct DistanceApp: App {
     
     // 使用环境对象管理全局状态和依赖
     @StateObject private var environment = AppEnvironment.shared
+    @StateObject private var authManager = AppEnvironment.shared.authManager as? AuthManager ?? AuthManager(
+        authService: AppEnvironment.shared.authService,
+        sessionManager: AppEnvironment.shared.sessionManager,
+        keychainManager: AppEnvironment.shared.keychainManager
+    )
+    @StateObject private var navigationManager = AppEnvironment.shared.navigationManager as? AppNavigationManager ?? AppNavigationManager()
     
     // 观察应用程序生命周期
     @Environment(\.scenePhase) private var scenePhase
@@ -18,8 +24,8 @@ struct DistanceApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(environment)
-                .environmentObject(environment.authManager as! AuthManager)
-                .environmentObject(environment.navigationManager as! AppNavigationManager)
+                .environmentObject(authManager)
+                .environmentObject(navigationManager)
         }
         .onChange(of: scenePhase) { oldPhase, newPhase in
             switch newPhase {
@@ -57,7 +63,7 @@ struct DistanceApp: App {
     private func updateUserActiveStatus(_ isActive: Bool) {
         Task {
             do {
-                try await environment.authManager.updateUserActiveStatus(isActive)
+                try await authManager.updateUserActiveStatus(isActive)
             } catch {
                 Logger.error("更新用户活跃状态失败: \(error.localizedDescription)")
             }
