@@ -4,9 +4,15 @@
 //
 
 import SwiftUI
+import Firebase
 
 @main
 struct DistanceApp: App {
+    // 初始化 Firebase
+    init() {
+        FirebaseApp.configure()
+    }
+    
     // 使用环境对象管理全局状态和依赖
     @StateObject private var environment = AppEnvironment.shared
     
@@ -18,7 +24,7 @@ struct DistanceApp: App {
             ContentView()
                 .environmentObject(environment)
         }
-        .onChange(of: scenePhase) { newPhase in
+        .onChange(of: scenePhase) { oldPhase, newPhase in
             switch newPhase {
             case .active:
                 // 应用变为活跃状态时检查会话
