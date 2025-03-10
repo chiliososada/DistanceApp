@@ -301,13 +301,10 @@ final class AuthManager: ObservableObject, AuthManagerProtocol {
             // 1. 创建用户
             let result = try await auth.createUser(withEmail: data.email, password: data.password)
             
-            // 2. 更新用户资料 //**
-            try await updateUserProfile(result.user, name: data.name)
-            
-            // 3. 发送验证邮件
+            // 2. 发送验证邮件
             try await result.user.sendEmailVerification()
             
-            // 4. 注册完成后退出Firebase
+            // 3. 注册完成后退出Firebase
             try auth.signOut()
             
         } catch {
