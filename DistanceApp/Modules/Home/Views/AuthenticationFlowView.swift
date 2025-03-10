@@ -31,6 +31,8 @@ struct AuthenticationFlowView: View {
                         ForgotPasswordView()
                     case .verifyEmail:
                         VerifyEmailView()
+                    case .completeProfile:
+                        CompleteProfileView()
                     default:
                         Text("未实现的页面：\(route.title)")
                     }

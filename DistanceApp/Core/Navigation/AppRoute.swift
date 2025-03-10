@@ -22,6 +22,8 @@ enum AppRoute: Hashable {
     case changePassword
     case accountSettings
     case deleteAccount
+    // 在AppRoute枚举中添加
+    case completeProfile  // 添加这一行
 }
 
 // 路由标题扩展
@@ -36,6 +38,9 @@ extension AppRoute {
             return "找回密码"
         case .verifyEmail:
             return "验证邮箱"
+            // 在title计算属性中添加
+        case .completeProfile:
+           return "完善个人信息"
         case .home:
             return "首页"
         case .profile:

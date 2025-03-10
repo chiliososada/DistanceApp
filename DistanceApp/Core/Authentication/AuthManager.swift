@@ -6,6 +6,7 @@
 import Foundation
 import Combine
 import FirebaseAuth
+import UIKit
 
 // MARK: - Protocol
 protocol AuthManagerProtocol {
@@ -33,6 +34,9 @@ protocol AuthManagerProtocol {
     
     // 用户状态
     func updateUserActiveStatus(_ isActive: Bool) async throws
+    
+    // 个人资料更新
+    func updateProfile(displayName: String, gender: String?, bio: String?, profileImage: UIImage?) async throws
 }
 
 // MARK: - Implementation
@@ -48,6 +52,7 @@ final class AuthManager: ObservableObject, AuthManagerProtocol {
     private let authService: AuthServiceProtocol
     private let sessionManager: SessionManagerProtocol
     private let keychainManager: KeychainManagerProtocol
+    private let profileService: ProfileServiceProtocol
     private var stateListener: AuthStateDidChangeListenerHandle?
     
     private let authStateSubject = PassthroughSubject<Bool, Never>()
@@ -59,12 +64,35 @@ final class AuthManager: ObservableObject, AuthManagerProtocol {
     init(
         authService: AuthServiceProtocol,
         sessionManager: SessionManagerProtocol,
-        keychainManager: KeychainManagerProtocol
+        keychainManager: KeychainManagerProtocol,
+        profileService: ProfileServiceProtocol
     ) {
         self.authService = authService
         self.sessionManager = sessionManager
         self.keychainManager = keychainManager
+        self.profileService = profileService
         setupAuthStateListener()
+    }
+    
+    // 为了兼容现有代码，添加不包含profileService的init方法
+    convenience init(
+        authService: AuthServiceProtocol,
+        sessionManager: SessionManagerProtocol,
+        keychainManager: KeychainManagerProtocol
+    ) {
+        // 创建一个文件存储管理器
+        let fileStorageManager = FileStorageManager()
+        
+        // 创建一个ProfileService
+        let apiClient = APIClient(sessionManager: sessionManager)
+        let profileService = ProfileService(apiClient: apiClient, fileStorageManager: fileStorageManager)
+        
+        self.init(
+            authService: authService,
+            sessionManager: sessionManager,
+            keychainManager: keychainManager,
+            profileService: profileService
+        )
     }
     
     deinit {
@@ -183,13 +211,28 @@ final class AuthManager: ObservableObject, AuthManagerProtocol {
             // 5. 存储session信息
             self.userProfile = userProfile
             await sessionManager.updateSessionWithToken(idToken: idToken, profile: userProfile)
-            //7. loginout -- displayname no ->update profile
-            // 6. 发布认证状态更新
+            
+            // 6. 从Firebase登出 - 新增部分
+            try auth.signOut()
+            Logger.info("已从Firebase登出，会话将由自己的后台管理")
+            
+            // 7. 检查displayName是否为空 - 新增部分
+            let shouldCompleteProfile = userProfile.displayName.isEmpty
+            
+            // 8. 发布认证状态更新
             self.authStateSubject.send(true)
             
-        
+            // 9. 如果需要完善个人信息，抛出特定错误 - 新增部分
+            if shouldCompleteProfile {
+                throw AuthError.profileIncomplete
+            }
             
         } catch {
+            // 捕获特定错误：如果是需要完善个人信息的错误，直接向上传递
+            if case AuthError.profileIncomplete = error {
+                throw error
+            }
+            
             self.error = AuthError.fromFirebaseError(error)
             throw self.error!
         }
@@ -335,6 +378,36 @@ final class AuthManager: ObservableObject, AuthManagerProtocol {
         Logger.info("用户状态更新为: \(isActive ? "在线" : "离线")")
         // 实际实现应当调用API
     }
+    
+    // MARK: - 个人资料更新
+    @MainActor
+    func updateProfile(displayName: String, gender: String?, bio: String?, profileImage: UIImage?) async throws {
+        isLoading = true
+        error = nil
+        
+        defer { isLoading = false }
+        
+        do {
+            // 调用个人资料服务更新资料
+            let updatedProfile = try await profileService.updateProfile(
+                displayName: displayName,
+                gender: gender,
+                bio: bio,
+                profileImage: profileImage
+            )
+            
+            // 更新本地保存的用户资料
+            self.userProfile = updatedProfile
+            await sessionManager.updateSession(user: updatedProfile)
+            
+            // 发布认证状态更新
+            self.authStateSubject.send(true)
+            
+        } catch {
+            self.error = error as? AuthError ?? AuthError.unknown(error.localizedDescription)
+            throw self.error!
+        }
+    }
 }
 
 // MARK: - Error Type
@@ -350,6 +423,7 @@ enum AuthError: LocalizedError, Equatable {
     case emailNotVerified
     case tooManyRequests
     case notImplemented
+    case profileIncomplete
     case unknown(String)
     
     var errorDescription: String? {
@@ -373,9 +447,11 @@ enum AuthError: LocalizedError, Equatable {
         case .emailNotVerified:
             return "邮箱尚未验证"
         case .tooManyRequests:
-            return "请求过于频繁，请稍后再试"
+            return "请求频率过高，请稍后再试"
         case .notImplemented:
             return "功能尚未实现"
+        case .profileIncomplete:
+            return "个人信息不完整，请完善个人资料"
         case .unknown(let message):
             return "错误：\(message)"
         }
@@ -429,7 +505,8 @@ enum AuthError: LocalizedError, Equatable {
              (.networkError, .networkError),
              (.emailNotVerified, .emailNotVerified),
              (.tooManyRequests, .tooManyRequests),
-             (.notImplemented, .notImplemented):
+             (.notImplemented, .notImplemented),
+             (.profileIncomplete, .profileIncomplete):
             return true
         case (.unknown(let lhsMessage), .unknown(let rhsMessage)):
             return lhsMessage == rhsMessage

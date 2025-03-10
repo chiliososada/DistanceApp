@@ -200,7 +200,18 @@ struct LoginView: View {
                     password: password
                 ))
                 Logger.debug("登录成功")
+                
             } catch let error as AuthError {
+                // 检查是否需要完善个人资料
+                if case .profileIncomplete = error {
+                    // 导航到完善个人资料页面
+                    await MainActor.run {
+                        navigationManager.navigate(to: .completeProfile)
+                    }
+                    return
+                }
+                
+                // 处理其他认证错误
                 await MainActor.run {
                     errorMessage = error.errorDescription ?? "登录失败"
                     Logger.error("登录失败: \(errorMessage)")

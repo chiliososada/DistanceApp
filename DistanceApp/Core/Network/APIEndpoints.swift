@@ -22,7 +22,7 @@ enum APIEndpoint {
     case updatePassword(currentPassword: String, newPassword: String)
     case deleteAccount(password: String)
     case checkSession
-    
+    case updateProfile(params: [String: Any])
     // MARK: - HTTP Headers
     var headers: [String: String] {
         var headers = ["Content-Type": "application/json"]
@@ -40,6 +40,8 @@ enum APIEndpoint {
             return .put
         case .deleteAccount:
             return .delete
+        case .updateProfile:
+            return .put
         }
     }
     
@@ -59,6 +61,8 @@ enum APIEndpoint {
             return "/api/v1/auth/account"
         case .checkSession:
             return "/api/v1/auth/checksession"
+        case .updateProfile:
+            return "/api/v1/profile"
         }
     }
     
@@ -68,9 +72,8 @@ enum APIEndpoint {
         case .loginWithFirebaseToken(let idToken):
             return ["id_token": idToken]
             
-    //    case .login(let email, let password):
-        //    return ["email": email, "password": password]
-            
+        case .updateProfile(let params):
+            return DynamicParameters(params)
         case .register(let email, let name, let password):
             return ["email": email, "name": name, "password": password]
             
@@ -83,5 +86,60 @@ enum APIEndpoint {
         case .checkSession:
             return nil
         }
+    }
+}
+struct DynamicParameters: Encodable {
+    private let parameters: [String: Any]
+    
+    init(_ parameters: [String: Any]) {
+        self.parameters = parameters
+    }
+    
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: DynamicCodingKey.self)
+        
+        for (key, value) in parameters {
+            let codingKey = DynamicCodingKey(key: key)
+            
+            if let boolValue = value as? Bool {
+                try container.encode(boolValue, forKey: codingKey)
+            } else if let stringValue = value as? String {
+                try container.encode(stringValue, forKey: codingKey)
+            } else if let intValue = value as? Int {
+                try container.encode(intValue, forKey: codingKey)
+            } else if let doubleValue = value as? Double {
+                try container.encode(doubleValue, forKey: codingKey)
+            } else if let arrayValue = value as? [String] {
+                try container.encode(arrayValue, forKey: codingKey)
+            } else if let dictValue = value as? [String: String] {
+                try container.encode(dictValue, forKey: codingKey)
+            } else {
+                // 对于不支持的类型，尝试使用JSON序列化
+                let jsonData = try JSONSerialization.data(withJSONObject: value, options: [])
+                if let jsonString = String(data: jsonData, encoding: .utf8) {
+                    try container.encode(jsonString, forKey: codingKey)
+                }
+            }
+        }
+    }
+}
+
+struct DynamicCodingKey: CodingKey {
+    var stringValue: String
+    var intValue: Int?
+    
+    init(key: String) {
+        self.stringValue = key
+        self.intValue = nil
+    }
+    
+    init?(stringValue: String) {
+        self.stringValue = stringValue
+        self.intValue = nil
+    }
+    
+    init?(intValue: Int) {
+        self.stringValue = String(intValue)
+        self.intValue = intValue
     }
 }

@@ -15,6 +15,7 @@ final class AppEnvironment: ObservableObject {
     
     // MARK: - Services
     let authService: AuthServiceProtocol
+    let profileService: ProfileServiceProtocol
     let authManager: AuthManagerProtocol
     let sessionManager: SessionManagerProtocol
     let navigationManager: NavigationManagerProtocol
@@ -26,7 +27,9 @@ final class AppEnvironment: ObservableObject {
     var typedAuthManager: AuthManager {
         return authManager as! AuthManager
     }
-    
+    var typedProfileService: ProfileService {
+        return profileService as! ProfileService
+    }
     var typedNavigationManager: AppNavigationManager {
         return navigationManager as! AppNavigationManager
     }
@@ -65,6 +68,11 @@ final class AppEnvironment: ObservableObject {
         )
         
         self.authService = AuthService(apiClient: apiClient)
+        let fileStorageManager = FileStorageManager()
+        self.profileService = ProfileService(
+            apiClient: apiClient,
+            fileStorageManager: fileStorageManager
+        )
         self.navigationManager = AppNavigationManager()
         
         self.authManager = AuthManager(
