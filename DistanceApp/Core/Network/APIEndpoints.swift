@@ -62,7 +62,7 @@ enum APIEndpoint {
         case .checkSession:
             return "/api/v1/auth/checksession"
         case .updateProfile:
-            return "/api/v1/profile"
+            return "/api/v1/auth/users/updateprofile"
         }
     }
     

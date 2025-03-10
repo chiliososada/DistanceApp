@@ -5,19 +5,12 @@
 //  Created on 2025/03/10.
 //
 
-//
-//  ProfileService.swift
-//  DistanceApp
-//
-//  Created on 2025/03/10.
-//
-
 import Foundation
 import UIKit
 
 // MARK: - Profile Service Protocol
 protocol ProfileServiceProtocol {
-    func updateProfile(displayName: String, gender: String?, bio: String?, profileImage: UIImage?) async throws -> UserProfile
+    func updateProfile(email: String, displayName: String, gender: String?, bio: String?, profileImage: UIImage?) async throws -> UserProfile
 }
 
 // MARK: - Profile Service Implementation
@@ -41,35 +34,70 @@ final class ProfileService: ProfileServiceProtocol {
     }
     
     // MARK: - Profile Methods
-    func updateProfile(displayName: String, gender: String?, bio: String?, profileImage: UIImage?) async throws -> UserProfile {
+    func updateProfile(email: String, displayName: String, gender: String?, bio: String?, profileImage: UIImage?) async throws -> UserProfile {
         // 准备请求参数
         var params: [String: Any] = [
-            "display_name": displayName
+            "email": email, // 必填字段
+            "nickname": displayName
         ]
         
-        // 添加可选参数
+        // 性别值转换
         if let gender = gender {
-            params["gender"] = gender
+            switch gender {
+            case "男":
+                params["gender"] = "male"
+            case "女":
+                params["gender"] = "female"
+            case "其他":
+                params["gender"] = "other"
+            default:
+                // 不发送未设置的性别
+                break
+            }
         }
         
-        if let bio = bio {
+        // 添加可选参数
+        if let bio = bio, !bio.isEmpty {
             params["bio"] = bio
         }
         
         // 如果有新头像，先上传图片
         if let profileImage = profileImage {
             let imageURL = try await uploadProfileImage(profileImage)
-            params["photo_url"] = imageURL
+            params["avatar_url"] = imageURL // 使用avatar_url而不是photo_url
+        }
+        
+        // 检查必填项
+        if email.isEmpty {
+            throw ProfileError.updateFailed("邮箱地址不能为空")
+        }
+        
+        if displayName.count < 2 || displayName.count > 50 {
+            throw ProfileError.updateFailed("昵称长度必须在2-50个字符之间")
         }
         
         // 构造API请求端点
         let endpoint = APIEndpoint.updateProfile(params: params)
         
-        // 发送请求
         let response: APIResponse<ProfileUpdateResponse> = try await apiClient.request(endpoint)
-        
-        // 构造并返回更新后的用户资料
-        return UserProfile(backendProfile: response.data.profile)
+        let data = response.data
+
+        // 使用接收到的数据创建 BackendUserProfile
+        let backendProfile = BackendUserProfile(
+            csrfToken: data.csrfToken,
+            authToken: data.chatToken,
+            uid: data.uid,
+            displayName: data.displayName,
+            photoUrl: data.photoUrl,
+            email: data.email,
+            gender: data.gender,
+            bio: data.bio,
+            session: data.session,
+            chatID: data.chatID,
+            chatUrl: data.chatUrl
+        )
+
+        return UserProfile(backendProfile: backendProfile)
     }
     
     // 上传头像图片
@@ -128,7 +156,32 @@ final class ProfileService: ProfileServiceProtocol {
 
 // MARK: - Response Models
 struct ProfileUpdateResponse: Codable {
-    let profile: BackendUserProfile
+    // 直接使用与 API 返回匹配的字段
+    let csrfToken: String
+    let chatToken: String
+    let uid: String
+    let displayName: String
+    let photoUrl: String?
+    let email: String
+    let gender: String?
+    let bio: String?
+    let session: String?
+    let chatID: [String]?
+    let chatUrl: String?
+    
+    enum CodingKeys: String, CodingKey {
+        case csrfToken = "csrf_token"
+        case chatToken = "chat_token"
+        case uid = "uid"
+        case displayName = "display_name"
+        case photoUrl = "photo_url"
+        case email = "email"
+        case gender = "gender"
+        case bio = "bio"
+        case session = "session"
+        case chatID = "chat_id"
+        case chatUrl = "chat_url"
+    }
 }
 
 // MARK: - Error Type

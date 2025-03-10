@@ -295,7 +295,19 @@ final class AuthManager: ObservableObject, AuthManagerProtocol {
         isLoading = true
         error = nil
         
-        defer { isLoading = false }
+        defer {
+            isLoading = false
+            
+            // 确保无论成功还是失败都尝试登出 Firebase
+            if auth.currentUser != nil {
+                do {
+                    try auth.signOut()
+                    Logger.info("注册流程结束，已从 Firebase 登出")
+                } catch {
+                    Logger.error("注册流程结束，从 Firebase 登出失败: \(error.localizedDescription)")
+                }
+            }
+        }
         
         do {
             // 1. 创建用户
@@ -303,9 +315,6 @@ final class AuthManager: ObservableObject, AuthManagerProtocol {
             
             // 2. 发送验证邮件
             try await result.user.sendEmailVerification()
-            
-            // 3. 注册完成后退出Firebase
-            try auth.signOut()
             
         } catch {
             self.error = AuthError.fromFirebaseError(error)
@@ -417,8 +426,14 @@ final class AuthManager: ObservableObject, AuthManagerProtocol {
         defer { isLoading = false }
         
         do {
-            // 调用个人资料服务更新资料
+            // 获取当前用户的电子邮件
+            guard let email = userProfile?.email else {
+                throw AuthError.unknown("无法获取当前用户邮箱")
+            }
+            
+            // 调用个人资料服务更新资料，传入电子邮件
             let updatedProfile = try await profileService.updateProfile(
+                email: email,
                 displayName: displayName,
                 gender: gender,
                 bio: bio,
