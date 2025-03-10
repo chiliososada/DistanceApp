@@ -116,11 +116,27 @@ final class AppEnvironment: ObservableObject {
                 lastSessionCheckTime = Date()
                 Logger.info("环境初始化: 执行会话检查")
                 
-                let isSessionValid = try await authManager.validateCurrentSession()
-                
-                await MainActor.run {
-                    self.isAuthenticated = isSessionValid
-                    self.isInitialized = true
+                do {
+                    let isSessionValid = try await authManager.validateCurrentSession()
+                    
+                    await MainActor.run {
+                        self.isAuthenticated = isSessionValid
+                        self.isInitialized = true
+                    }
+                } catch let authError as AuthError {
+                    if case .profileIncomplete = authError {
+                        // 资料不完整但会话有效，设置特殊状态
+                        await MainActor.run {
+                            self.isAuthenticated = false // 认为未完全认证
+                            self.isInitialized = true
+                            
+                            // 导航到完善资料页面
+                            (self.navigationManager as? AppNavigationManager)?.navigate(to: .completeProfile)
+                        }
+                    } else {
+                        // 其他认证错误
+                        throw authError
+                    }
                 }
             } else {
                 Logger.info("环境初始化: 跳过会话检查(已在短时间内执行过)")

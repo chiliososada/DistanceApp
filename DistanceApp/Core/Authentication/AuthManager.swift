@@ -143,15 +143,28 @@ final class AuthManager: ObservableObject, AuthManagerProtocol {
                 // 如果会话有效，确保加载用户配置文件
                 if let profile = sessionManager.getSavedProfile() {
                     self.userProfile = profile
+                    
+                    // 检查用户资料是否完整
+                    if profile.displayName.isEmpty {
+                        // 用户资料不完整，但会话有效
+                        // 不清除会话，让用户能够完善资料
+                        throw AuthError.profileIncomplete
+                    }
+                    
                     self.authStateSubject.send(true)
                     return true
+                    
                 } else if sessionManager.shouldRefreshProfile() {
-                    // 如果需要刷新用户配置文件（此处应从AuthService获取）
-                    // 注意：这里假设AuthService有一个获取当前用户资料的方法
-                    // 实际实现可能需要调整，取决于您的AuthService接口
+                    // 如果需要刷新用户配置文件
                     let profile = try await getCurrentUserProfile()
                     await sessionManager.updateSession(user: profile)
                     self.userProfile = profile
+                    
+                    // 检查用户资料是否完整
+                    if profile.displayName.isEmpty {
+                        throw AuthError.profileIncomplete
+                    }
+                    
                     self.authStateSubject.send(true)
                     return true
                 }
@@ -164,8 +177,14 @@ final class AuthManager: ObservableObject, AuthManagerProtocol {
             self.userProfile = nil
             self.authStateSubject.send(false)
             return false
+            
         } catch {
-            // 出现错误时，保守处理为会话无效
+            // 如果是profileIncomplete错误，我们不清除session
+            if case AuthError.profileIncomplete = error {
+                throw error
+            }
+            
+            // 其他错误时，保守处理为会话无效
             await sessionManager.clearSession()
             self.userProfile = nil
             self.authStateSubject.send(false)
@@ -191,40 +210,53 @@ final class AuthManager: ObservableObject, AuthManagerProtocol {
         
         defer { isLoading = false }
         
-        do {
-            // 1. Firebase 认证
+        // 将 Firebase 认证放在单独的函数中，以便使用 defer 确保登出
+        func authenticateWithFirebase() async throws -> (User, String) {
             let result = try await auth.signIn(withEmail: credentials.email, password: credentials.password)
+            let user = result.user
             
-            // 2. 检查邮箱验证
-            if !result.user.isEmailVerified {
-                // 如果未验证，发送验证邮件
-                try await result.user.sendEmailVerification()
+            // 确保无论如何都从 Firebase 登出
+            defer {
+                do {
+                    try auth.signOut()
+                    Logger.info("已从Firebase登出，会话将由自己的后台管理")
+                } catch {
+                    Logger.error("从Firebase登出失败: \(error.localizedDescription)")
+                }
+            }
+            
+            // 检查邮箱验证
+            if !user.isEmailVerified {
+                try await user.sendEmailVerification()
                 throw AuthError.emailNotVerified
             }
             
-            // 3. 获取 idToken
-            let idToken = try await result.user.getIDToken()
+            // 获取 idToken
+            let idToken = try await user.getIDToken()
+            return (user, idToken)
+        }
+        
+        do {
+            // 1. Firebase 认证和获取令牌
+            let (_, idToken) = try await authenticateWithFirebase()
             
-            // 4. 调用后端API进行真正的登录 - 使用AuthService
+            // 2. 调用后端API进行真正的登录
             let userProfile = try await authService.loginWithFirebaseToken(idToken)
             
-            // 5. 存储session信息
+            // 3. 存储session信息
             self.userProfile = userProfile
             await sessionManager.updateSessionWithToken(idToken: idToken, profile: userProfile)
             
-            // 6. 从Firebase登出 - 新增部分
-            try auth.signOut()
-            Logger.info("已从Firebase登出，会话将由自己的后台管理")
-            
-            // 7. 检查displayName是否为空 - 新增部分
+            // 4. 检查displayName是否为空
             let shouldCompleteProfile = userProfile.displayName.isEmpty
             
-            // 8. 发布认证状态更新
-            self.authStateSubject.send(true)
-            
-            // 9. 如果需要完善个人信息，抛出特定错误 - 新增部分
+            // 5. 根据个人资料完整性决定认证状态和后续流程
             if shouldCompleteProfile {
+                // 如果需要完善个人信息，抛出特定错误
                 throw AuthError.profileIncomplete
+            } else {
+                // 只有资料完整时才发布认证成功状态
+                self.authStateSubject.send(true)
             }
             
         } catch {
