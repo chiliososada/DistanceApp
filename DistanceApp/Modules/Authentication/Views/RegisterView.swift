@@ -1,18 +1,13 @@
-//
-//  RegisterView.swift
-//  DistanceApp
-//
-//  Created by toyousoft on 2025/03/10.
-//
-
 import SwiftUI
 
 struct RegisterView: View {
     @EnvironmentObject private var authManager: AuthManager
+    @EnvironmentObject private var navigationManager: AppNavigationManager
     @State private var email = ""
     @State private var password = ""
     @State private var confirmPassword = ""
-    @State private var showSuccess = false
+    @State private var showAlert = false
+    @State private var alertMessage = ""
     
     var body: some View {
         VStack(spacing: 20) {
@@ -21,8 +16,6 @@ struct RegisterView: View {
                 .fontWeight(.bold)
             
             VStack(spacing: 15) {
-                // 删除姓名输入框
-                
                 TextField("邮箱", text: $email)
                     .keyboardType(.emailAddress)
                     .autocapitalization(.none)
@@ -60,10 +53,10 @@ struct RegisterView: View {
             Spacer()
         }
         .padding()
-        .alert(isPresented: $showSuccess) {
+        .alert(isPresented: $showAlert) {
             Alert(
-                title: Text("注册成功"),
-                message: Text("请查看您的邮箱并验证账户"),
+                title: Text("错误"),
+                message: Text(alertMessage),
                 dismissButton: .default(Text("确定"))
             )
         }
@@ -78,7 +71,7 @@ struct RegisterView: View {
         .navigationBarTitleDisplayMode(.inline)
     }
     
-    // 修改表单验证，移除姓名检查
+    // 表单验证
     private var isFormValid: Bool {
         !email.isEmpty && !password.isEmpty && password == confirmPassword && password.count >= 6
     }
@@ -103,13 +96,23 @@ struct RegisterView: View {
                     password: password,
                     name: "" // 使用空字符串作为name，保持结构体兼容性
                 ))
-                showSuccess = true
-                // 重置表单
-                email = ""
-                password = ""
-                confirmPassword = ""
+                
+                // 注册成功后，导航到验证邮箱页面
+                await MainActor.run {
+                    // 重置表单
+                    email = ""
+                    password = ""
+                    confirmPassword = ""
+                    
+                    // 导航到验证邮箱页面
+                    navigationManager.navigate(to: .verifyEmail)
+                }
             } catch {
-                // 错误已在AuthManager中处理
+                // 处理错误
+                await MainActor.run {
+                    showAlert = true
+                    alertMessage = error.localizedDescription
+                }
             }
         }
     }
