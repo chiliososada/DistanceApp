@@ -24,6 +24,7 @@ struct ContentView: View {
             } else if environment.isAuthenticated {
                 // 已认证：主应用界面
                 authenticatedView
+                //updateprofile
             } else {
                 // 未认证：认证流程
                 AuthenticationFlowView()

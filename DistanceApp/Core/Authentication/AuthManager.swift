@@ -183,9 +183,11 @@ final class AuthManager: ObservableObject, AuthManagerProtocol {
             // 5. 存储session信息
             self.userProfile = userProfile
             await sessionManager.updateSessionWithToken(idToken: idToken, profile: userProfile)
-            
+            //7. loginout -- displayname no ->update profile
             // 6. 发布认证状态更新
             self.authStateSubject.send(true)
+            
+        
             
         } catch {
             self.error = AuthError.fromFirebaseError(error)
@@ -224,7 +226,7 @@ final class AuthManager: ObservableObject, AuthManagerProtocol {
             // 1. 创建用户
             let result = try await auth.createUser(withEmail: data.email, password: data.password)
             
-            // 2. 更新用户资料
+            // 2. 更新用户资料 //**
             try await updateUserProfile(result.user, name: data.name)
             
             // 3. 发送验证邮件
