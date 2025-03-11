@@ -218,6 +218,7 @@ final class AppEnvironment: ObservableObject {
     }
     
     /// 重置环境状态
+    @MainActor
     func reset() async {
         do {
             // 取消当前的会话检查任务
@@ -225,11 +226,11 @@ final class AppEnvironment: ObservableObject {
             sessionCheckTask = nil
             
             try await authManager.signOut()
+           
             navigationManager.resetNavigation()
             
-            await MainActor.run {
-                self.isAuthenticated = false
-            }
+        
+            self.isAuthenticated = false
         } catch {
             Logger.error("环境重置失败: \(error.localizedDescription)")
         }

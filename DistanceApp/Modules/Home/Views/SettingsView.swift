@@ -243,26 +243,12 @@ struct SettingsView: View {
         isLoggingOut = true
         
         Task {
-            do {
-                // 登出
-                try await authManager.signOut()
-                
-                // 重置环境
-                await environment.reset()
-                
-                // 重置导航
-                navigationManager.resetNavigation()
-                
-                // 更新状态
-                await MainActor.run {
-                    isLoggingOut = false
-                }
-            } catch {
-                Logger.error("登出失败: \(error.localizedDescription)")
-                await MainActor.run {
-                    isLoggingOut = false
-                    // 可以在这里添加错误处理，例如显示一个错误提示
-                }
+            // 不需要do-catch，因为reset()内部已处理错误
+            await environment.reset()
+            
+            // 切换到主线程更新UI状态
+            await MainActor.run {
+                isLoggingOut = false
             }
         }
     }

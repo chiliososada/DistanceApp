@@ -53,7 +53,7 @@ struct ContentView: View {
                 }
                 .tag(Tab.profile)
             
-            Text("设置") // 替换为实际的SettingsView
+            SettingsView() // 使用实际的SettingsView
                 .tabItem {
                     Label("设置", systemImage: "gear")
                 }
@@ -81,10 +81,6 @@ struct ContentView: View {
             Text("用户资料页面")
         case .settings:
             SettingsView()
-                .tabItem {
-                    Label("设置", systemImage: "gear")
-                }
-                .tag(Tab.settings)
         case .changePassword:
             Text("修改密码页面")
         case .accountSettings:

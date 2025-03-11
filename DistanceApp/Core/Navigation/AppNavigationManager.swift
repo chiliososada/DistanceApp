@@ -146,6 +146,8 @@ final class AppNavigationManager: ObservableObject, NavigationManagerProtocol {
         }
     }
     
+    // 在 AppNavigationManager.swift 中
+    @MainActor  // 添加这个注解
     func resetNavigation() {
         Logger.info("Resetting navigation state")
         navigationPath = NavigationPath()
