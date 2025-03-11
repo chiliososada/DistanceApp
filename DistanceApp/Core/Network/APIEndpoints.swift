@@ -23,6 +23,7 @@ enum APIEndpoint {
     case deleteAccount(password: String)
     case checkSession
     case updateProfile(params: [String: Any])
+    case signout
     // MARK: - HTTP Headers
     var headers: [String: String] {
         var headers = ["Content-Type": "application/json"]
@@ -35,6 +36,8 @@ enum APIEndpoint {
         case .checkSession:
             return .get
         case .register, .loginWithFirebaseToken:
+            return .post
+        case .signout:
             return .post
         case .updatePassword:
             return .put
@@ -51,6 +54,8 @@ enum APIEndpoint {
         // Auth Paths
         case .loginWithFirebaseToken:
             return "/api/v1/login"
+        case .signout:
+            return "/api/v1/auth/users/signout"
        // case .login:
         //    return "/api/v1/login"
         case .register:
@@ -74,6 +79,8 @@ enum APIEndpoint {
             
         case .updateProfile(let params):
             return DynamicParameters(params)
+        case .signout:
+            return nil
         case .register(let email, let name, let password):
             return ["email": email, "name": name, "password": password]
             

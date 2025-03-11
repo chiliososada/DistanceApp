@@ -263,7 +263,9 @@ private class MockAuthService: AuthServiceProtocol {
     func loginWithFirebaseToken(_ idToken: String) async throws -> UserProfile {
         fatalError("未实现")
     }
-    
+    func signOut()async throws {
+        fatalError("未实现")
+    }
     func checkSession() async throws -> Bool {
         return false
     }

@@ -330,19 +330,24 @@ final class AuthManager: ObservableObject, AuthManagerProtocol {
         defer { isLoading = false }
         
         do {
-            // 1. 清除session
-            await sessionManager.clearSession()
+            // 1. 调用后端API登出
+                  try await authService.signOut()
+                  
+                  // 2. 清除session
+                  await sessionManager.clearSession()
+                  
+                  // 3. 清除本地状态
+                  self.userProfile = nil
+                  
+                  // 4. 发布认证状态更新
+                  self.authStateSubject.send(false)
             
-            // 2. 清除本地状态
-            self.userProfile = nil
-            
-            // 3. Firebase 登出
+           
 //            if auth.currentUser != nil {
 //                try auth.signOut()
 //            }
             
-            // 4. 发布认证状态更新
-            self.authStateSubject.send(false)
+       
             
         } catch {
             self.error = AuthError.fromFirebaseError(error)

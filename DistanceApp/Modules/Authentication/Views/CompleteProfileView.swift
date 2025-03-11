@@ -283,11 +283,15 @@ struct CompleteProfileView_Previews: PreviewProvider {
         func loginWithFirebaseToken(_ idToken: String) async throws -> UserProfile {
             fatalError("未实现")
         }
-        
+        func signOut() async throws {
+            fatalError("未实现")
+        }
         func checkSession() async throws -> Bool {
             return false
         }
-        
+        func loginout(password: String) async throws {
+            fatalError("未实现")
+        }
         func updatePassword(currentPassword: String, newPassword: String) async throws {
             fatalError("未实现")
         }

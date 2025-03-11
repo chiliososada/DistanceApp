@@ -11,6 +11,7 @@ protocol AuthServiceProtocol {
     func checkSession() async throws -> Bool
     func updatePassword(currentPassword: String, newPassword: String) async throws
     func deleteAccount(password: String) async throws
+    func signOut() async throws
 }
 
 // MARK: - Auth Service Implementation
@@ -61,6 +62,10 @@ final class AuthService: AuthServiceProtocol {
         }
     }
     
+    
+    func signOut() async throws {
+        let _: APIResponse<EmptyResponse> = try await apiClient.request(.signout)
+    }
     func updatePassword(currentPassword: String, newPassword: String) async throws {
         // 对于不需要返回数据的请求，使用包装一个空响应
         let _: APIResponse<EmptyResponse> = try await apiClient.request(.updatePassword(currentPassword: currentPassword, newPassword: newPassword))
