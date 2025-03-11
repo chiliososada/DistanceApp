@@ -55,7 +55,6 @@ protocol NavigationManagerProtocol {
 }
 
 // MARK: - Implementation
-// MARK: - Implementation
 final class AppNavigationManager: ObservableObject, NavigationManagerProtocol {
     // MARK: - Published Properties
     @Published var navigationPath = NavigationPath()

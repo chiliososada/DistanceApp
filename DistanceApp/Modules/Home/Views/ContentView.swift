@@ -80,7 +80,11 @@ struct ContentView: View {
         case .profile:
             Text("用户资料页面")
         case .settings:
-            Text("设置页面")
+            SettingsView()
+                .tabItem {
+                    Label("设置", systemImage: "gear")
+                }
+                .tag(Tab.settings)
         case .changePassword:
             Text("修改密码页面")
         case .accountSettings:
