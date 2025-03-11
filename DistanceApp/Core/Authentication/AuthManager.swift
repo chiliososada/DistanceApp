@@ -250,12 +250,12 @@ final class AuthManager: ObservableObject, AuthManagerProtocol {
             // 4. 检查displayName是否为空
             let shouldCompleteProfile = userProfile.displayName.isEmpty
             
-            // 5. 根据个人资料完整性决定认证状态和后续流程
+            // 5. 根据个人资料完整性决定后续流程
             if shouldCompleteProfile {
                 // 如果需要完善个人信息，抛出特定错误
                 throw AuthError.profileIncomplete
             } else {
-                // 只有资料完整时才发布认证成功状态
+                // 资料完整时，发布认证成功状态
                 self.authStateSubject.send(true)
             }
             
@@ -337,9 +337,9 @@ final class AuthManager: ObservableObject, AuthManagerProtocol {
             self.userProfile = nil
             
             // 3. Firebase 登出
-            if auth.currentUser != nil {
-                try auth.signOut()
-            }
+//            if auth.currentUser != nil {
+//                try auth.signOut()
+//            }
             
             // 4. 发布认证状态更新
             self.authStateSubject.send(false)

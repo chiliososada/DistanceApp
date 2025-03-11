@@ -18,7 +18,7 @@ final class AppEnvironment: ObservableObject {
     let profileService: ProfileServiceProtocol
     let authManager: AuthManagerProtocol
     let sessionManager: SessionManagerProtocol
-    let navigationManager: NavigationManagerProtocol
+    let navigationManager: AppNavigationManager // 明确类型避免类型转换
     let apiClient: APIClientProtocol
     let storageManager: StorageManagerProtocol
     let keychainManager: KeychainManagerProtocol
@@ -30,13 +30,11 @@ final class AppEnvironment: ObservableObject {
     var typedProfileService: ProfileService {
         return profileService as! ProfileService
     }
-    var typedNavigationManager: AppNavigationManager {
-        return navigationManager as! AppNavigationManager
-    }
     
     // MARK: - Published Properties
     @Published var isAuthenticated: Bool = false
     @Published var isInitialized: Bool = false
+    @Published var isProfileIncomplete: Bool = false // 新增：标识用户资料是否不完整
     @Published var systemTheme: ColorScheme = .light
     
     // MARK: - Private
@@ -89,7 +87,10 @@ final class AppEnvironment: ObservableObject {
         authManager.authStatePublisher
             .receive(on: RunLoop.main)
             .sink { [weak self] isAuthenticated in
-                self?.isAuthenticated = isAuthenticated
+                guard let self = self else { return }
+                self.isAuthenticated = isAuthenticated
+                // 更新导航管理器中的认证状态
+                self.navigationManager.updateAuthenticationState(isAuthenticated: isAuthenticated)
             }
             .store(in: &cancellables)
     }
@@ -121,20 +122,27 @@ final class AppEnvironment: ObservableObject {
                     
                     await MainActor.run {
                         self.isAuthenticated = isSessionValid
+                        self.isProfileIncomplete = false // 确保重置资料完整性状态
                         self.isInitialized = true
                     }
                 } catch let authError as AuthError {
                     if case .profileIncomplete = authError {
                         // 资料不完整但会话有效，设置特殊状态
                         await MainActor.run {
-                            self.isAuthenticated = false // 认为未完全认证
+                            self.isProfileIncomplete = true // 标记资料不完整
+                            self.isAuthenticated = true // 认为已部分认证
                             self.isInitialized = true
                             
                             // 导航到完善资料页面
-                            (self.navigationManager as? AppNavigationManager)?.navigate(to: .completeProfile)
+                            self.navigationManager.navigate(to: .completeProfile)
                         }
                     } else {
                         // 其他认证错误
+                        await MainActor.run {
+                            self.isAuthenticated = false
+                            self.isProfileIncomplete = false
+                            self.isInitialized = true
+                        }
                         throw authError
                     }
                 }
@@ -148,6 +156,7 @@ final class AppEnvironment: ObservableObject {
             Logger.error("环境初始化失败: \(error.localizedDescription)")
             await MainActor.run {
                 self.isAuthenticated = false
+                self.isProfileIncomplete = false
                 self.isInitialized = true
             }
         }
@@ -184,15 +193,37 @@ final class AppEnvironment: ObservableObject {
                 // Update authentication state on main actor
                 await MainActor.run {
                     self.isAuthenticated = isValid
+                    // 如果会话有效，重置资料完整性状态
+                    if isValid {
+                        self.isProfileIncomplete = false
+                    }
                 }
                 
                 return isValid
+            } catch let authError as AuthError {
+                if case .profileIncomplete = authError {
+                    // 资料不完整但会话有效
+                    await MainActor.run {
+                        self.isProfileIncomplete = true
+                        self.isAuthenticated = true
+                    }
+                    return true // 会话有效，只是资料不完整
+                } else {
+                    // 其他错误
+                    Logger.error("会话检查失败: \(authError.localizedDescription)")
+                    await MainActor.run {
+                        self.isAuthenticated = false
+                        self.isProfileIncomplete = false
+                    }
+                    throw authError
+                }
             } catch {
                 Logger.error("会话检查失败: \(error.localizedDescription)")
                 
                 // Update authentication state on main actor
                 await MainActor.run {
                     self.isAuthenticated = false
+                    self.isProfileIncomplete = false
                 }
                 
                 // Re-throw the error to be caught by the caller
@@ -228,9 +259,9 @@ final class AppEnvironment: ObservableObject {
             try await authManager.signOut()
            
             navigationManager.resetNavigation()
-            
         
             self.isAuthenticated = false
+            self.isProfileIncomplete = false
         } catch {
             Logger.error("环境重置失败: \(error.localizedDescription)")
         }

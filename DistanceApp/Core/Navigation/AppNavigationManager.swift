@@ -2,19 +2,9 @@
 //  AppNavigationManager.swift
 //  DistanceApp
 //
-//  Created by toyousoft on 2025/03/03.
-//
-
-//
-//  AppNavigationManager.swift
-//  DistanceApp
-//
-//  Created by toyousoft on 2025/03/03.
-//
 
 import SwiftUI
 import Combine
-
 
 // 标签页枚举
 enum Tab: String, Identifiable, CaseIterable {
@@ -38,6 +28,7 @@ enum Tab: String, Identifiable, CaseIterable {
         }
     }
 }
+
 // MARK: - Protocol
 protocol NavigationManagerProtocol {
     var navigationPath: NavigationPath { get }
@@ -57,10 +48,32 @@ protocol NavigationManagerProtocol {
 // MARK: - Implementation
 final class AppNavigationManager: ObservableObject, NavigationManagerProtocol {
     // MARK: - Published Properties
-    @Published var navigationPath = NavigationPath()
+    @Published var navigationPath = NavigationPath() // 保留旧路径用于认证流程
+    @Published var homeTabPath = NavigationPath() // 首页标签导航路径
+    @Published var profileTabPath = NavigationPath() // 个人资料标签导航路径
+    @Published var settingsTabPath = NavigationPath() // 设置标签导航路径
     @Published var selectedTab: Tab = .home
     @Published var presentedSheet: AppRoute?
     @Published var isPresentingSheet = false
+    @Published var isAuthenticated = false // 添加认证状态跟踪
+    
+    // MARK: - 当前活动标签的导航路径
+    var currentTabPath: NavigationPath {
+        get {
+            switch selectedTab {
+            case .home: return homeTabPath
+            case .profile: return profileTabPath
+            case .settings: return settingsTabPath
+            }
+        }
+        set {
+            switch selectedTab {
+            case .home: homeTabPath = newValue
+            case .profile: profileTabPath = newValue
+            case .settings: settingsTabPath = newValue
+            }
+        }
+    }
     
     // MARK: - Private Properties
     private var cancellables = Set<AnyCancellable>()
@@ -97,6 +110,22 @@ final class AppNavigationManager: ObservableObject, NavigationManagerProtocol {
             .dropFirst()
             .sink { Logger.debug("Navigation: isPresentingSheet changed to: \($0)") }
             .store(in: &cancellables)
+        
+        // 监听各标签页导航路径变化
+        $homeTabPath
+            .dropFirst()
+            .sink { _ in Logger.debug("Navigation: Home tab path changed") }
+            .store(in: &cancellables)
+        
+        $profileTabPath
+            .dropFirst()
+            .sink { _ in Logger.debug("Navigation: Profile tab path changed") }
+            .store(in: &cancellables)
+        
+        $settingsTabPath
+            .dropFirst()
+            .sink { _ in Logger.debug("Navigation: Settings tab path changed") }
+            .store(in: &cancellables)
     }
     
     // MARK: - Navigation Methods
@@ -105,7 +134,22 @@ final class AppNavigationManager: ObservableObject, NavigationManagerProtocol {
         // 确保在主线程执行
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            self.navigationPath.append(route)
+            
+            // 区分认证/未认证状态的导航
+            if self.isAuthenticated {
+                // 已认证状态：使用标签页导航
+                switch self.selectedTab {
+                case .home:
+                    self.homeTabPath.append(route)
+                case .profile:
+                    self.profileTabPath.append(route)
+                case .settings:
+                    self.settingsTabPath.append(route)
+                }
+            } else {
+                // 未认证状态：使用全局导航路径
+                self.navigationPath.append(route)
+            }
         }
     }
     
@@ -136,24 +180,63 @@ final class AppNavigationManager: ObservableObject, NavigationManagerProtocol {
     
     func popToRoot() {
         Logger.info("Popping to root")
-        navigationPath = NavigationPath()
+        if isAuthenticated {
+            // 清除当前标签页的导航路径
+            switch selectedTab {
+            case .home:
+                homeTabPath = NavigationPath()
+            case .profile:
+                profileTabPath = NavigationPath()
+            case .settings:
+                settingsTabPath = NavigationPath()
+            }
+        } else {
+            // 未认证状态清除全局导航路径
+            navigationPath = NavigationPath()
+        }
     }
     
     func goBack() {
         Logger.info("Going back")
-        if !navigationPath.isEmpty {
-            navigationPath.removeLast()
+        if isAuthenticated {
+            // 从当前标签页的导航路径中移除最后一项
+            switch selectedTab {
+            case .home:
+                if !homeTabPath.isEmpty {
+                    homeTabPath.removeLast()
+                }
+            case .profile:
+                if !profileTabPath.isEmpty {
+                    profileTabPath.removeLast()
+                }
+            case .settings:
+                if !settingsTabPath.isEmpty {
+                    settingsTabPath.removeLast()
+                }
+            }
+        } else {
+            // 未认证状态，从全局导航路径中移除
+            if !navigationPath.isEmpty {
+                navigationPath.removeLast()
+            }
         }
     }
     
-    // 在 AppNavigationManager.swift 中
-    @MainActor  // 添加这个注解
+    @MainActor
     func resetNavigation() {
         Logger.info("Resetting navigation state")
+        homeTabPath = NavigationPath()
+        profileTabPath = NavigationPath()
+        settingsTabPath = NavigationPath()
         navigationPath = NavigationPath()
         selectedTab = .home
         isPresentingSheet = false
         presentedSheet = nil
+    }
+    
+    // 更新认证状态
+    func updateAuthenticationState(isAuthenticated: Bool) {
+        self.isAuthenticated = isAuthenticated
     }
 }
 

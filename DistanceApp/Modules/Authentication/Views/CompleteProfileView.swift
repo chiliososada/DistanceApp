@@ -198,24 +198,24 @@ struct CompleteProfileView: View {
         isLoading = true
         
         Task {
-            do {
-                // 这里调用更新个人信息的API
-                // 注意：需要在AuthManager中添加updateProfile方法
-                try await authManager.updateProfile(
-                    displayName: displayName,
-                    gender: gender == "未设置" ? nil : gender,
-                    bio: bio.isEmpty ? nil : bio,
-                    profileImage: selectedImage
-                )
-                
-                // 更新成功，导航到主页
-                await MainActor.run {
-                    isLoading = false
-                    navigationManager.popToRoot()
-                    // 更新环境状态，确保认证状态正确
-                    environment.isAuthenticated = true
-                }
-            } catch {
+                do {
+                    try await authManager.updateProfile(
+                        displayName: displayName,
+                        gender: gender == "未设置" ? nil : gender,
+                        bio: bio.isEmpty ? nil : bio,
+                        profileImage: selectedImage
+                    )
+                    
+                    // 更新成功，导航到主页
+                    await MainActor.run {
+                        isLoading = false
+                        // 不再使用 navigationManager.popToRoot()
+                        
+                        // 更新环境状态
+                        environment.isAuthenticated = true
+                        environment.isProfileIncomplete = false // 明确标记资料已完善
+                    }
+                }  catch {
                 await MainActor.run {
                     isLoading = false
                     errorMessage = error.localizedDescription

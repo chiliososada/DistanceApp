@@ -7,59 +7,81 @@ struct ContentView: View {
     @EnvironmentObject private var authManager: AuthManager
     
     var body: some View {
-        NavigationStack(path: $navigationManager.navigationPath) {
-            Group {
-                if !environment.isInitialized {
-                    // 初始加载视图
-                    LoadingView(message: "正在加载...")
-                        .task {
-                            await environment.initialize()
-                        }
-                } else if environment.isAuthenticated {
-                    // 已认证：主应用界面
-                    mainTabView
+           Group {
+               if !environment.isInitialized {
+                   // 初始加载视图
+                   LoadingView(message: "正在加载...")
+                       .task {
+                           await environment.initialize()
+                       }
+               } else if environment.isAuthenticated {
+                   if environment.isProfileIncomplete {
+                       // 已认证但需要完善资料
+                       NavigationStack {
+                           CompleteProfileView()
+                       }
+                   } else {
+                       // 已完全认证：主应用界面 - 使用TabView
+                       mainTabView
+                   }
+               } else {
+                   // 未认证：认证流程 - 保持原有导航路径
+                   NavigationStack(path: $navigationManager.navigationPath) {
+                       LoginView()
+                           .navigationDestination(for: AppRoute.self) { route in
+                               authDestinationView(for: route)
+                           }
+                   }
+               }
+           }
+           .sheet(isPresented: $navigationManager.isPresentingSheet) {
+               if let route = navigationManager.presentedSheet {
+                   sheetView(for: route)
+               }
+           }
+           .preferredColorScheme(environment.systemTheme)
+       }
+    
+    // 主标签页视图 - 使用各标签页独立的导航路径
+    private var mainTabView: some View {
+            TabView(selection: $navigationManager.selectedTab) {
+                // 首页标签
+                NavigationStack(path: $navigationManager.homeTabPath) {
+                    HomeView()
                         .navigationDestination(for: AppRoute.self) { route in
                             destinationView(for: route)
                         }
-                } else {
-                    // 未认证：认证流程
-                    LoginView()
-                        .navigationDestination(for: AppRoute.self) { route in
-                            authDestinationView(for: route)
-                        }
                 }
-            }
-            .sheet(isPresented: $navigationManager.isPresentingSheet) {
-                if let route = navigationManager.presentedSheet {
-                    sheetView(for: route)
-                }
-            }
-        }
-        .preferredColorScheme(environment.systemTheme)
-    }
-    
-    // 主标签页视图
-    private var mainTabView: some View {
-        TabView(selection: $navigationManager.selectedTab) {
-            HomeView()
                 .tabItem {
                     Label("首页", systemImage: "house.fill")
                 }
                 .tag(Tab.home)
-            
-            Text("个人资料") // 替换为实际的ProfileView
+                
+                // 个人资料标签
+                NavigationStack(path: $navigationManager.profileTabPath) {
+                    Text("个人资料") // 替换为实际的ProfileView
+                        .navigationDestination(for: AppRoute.self) { route in
+                            destinationView(for: route)
+                        }
+                }
                 .tabItem {
                     Label("我的", systemImage: "person.fill")
                 }
                 .tag(Tab.profile)
-            
-            SettingsView() // 使用实际的SettingsView
+                
+                // 设置标签
+                NavigationStack(path: $navigationManager.settingsTabPath) {
+                    SettingsView()
+                        .navigationDestination(for: AppRoute.self) { route in
+                            destinationView(for: route)
+                        }
+                }
                 .tabItem {
                     Label("设置", systemImage: "gear")
                 }
                 .tag(Tab.settings)
+            }
         }
-    }
     
     // 目标视图构建器
     @ViewBuilder
