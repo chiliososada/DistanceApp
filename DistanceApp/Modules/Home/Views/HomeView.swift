@@ -1,10 +1,3 @@
-//
-//  HomeView.swift
-//  DistanceApp
-//
-//  Created by toyousoft on 2025/03/03.
-//
-
 import SwiftUI
 
 struct HomeView: View {
@@ -17,37 +10,35 @@ struct HomeView: View {
     @State private var isRefreshing = false
     
     var body: some View {
-        NavigationStack {
-            VStack {
-                // 搜索栏
-                searchBar
+        VStack {
+            // 搜索栏
+            searchBar
+            
+            // 内容区域
+            ScrollView {
+                // 顶部卡片
+                featuredContentCard
                 
-                // 内容区域
-                ScrollView {
-                    // 顶部卡片
-                    featuredContentCard
-                    
-                    // 分类列表
-                    categoriesList
-                    
-                    // 推荐列表
-                    recommendationsList
-                }
-                .refreshable {
-                    // 模拟刷新操作
-                    isRefreshing = true
-                    try? await Task.sleep(nanoseconds: 1_000_000_000)
-                    isRefreshing = false
-                }
+                // 分类列表
+                categoriesList
+                
+                // 推荐列表
+                recommendationsList
             }
-            .navigationTitle("探索")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: {
-                        // 通知按钮操作
-                    }) {
-                        Image(systemName: "bell")
-                    }
+            .refreshable {
+                // 模拟刷新操作
+                isRefreshing = true
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                isRefreshing = false
+            }
+        }
+        .navigationTitle("探索")
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button(action: {
+                    // 通知按钮操作
+                }) {
+                    Image(systemName: "bell")
                 }
             }
         }
@@ -256,13 +247,15 @@ struct Recommendation: Identifiable {
 #if DEBUG
 struct HomeView_Previews: PreviewProvider {
     static var previews: some View {
-        HomeView()
-            .environmentObject(AppNavigationManager.preview)
-            .environmentObject(AuthManager(
-                authService: AppEnvironment.shared.authService,
-                sessionManager: AppEnvironment.shared.sessionManager,
-                keychainManager: AppEnvironment.shared.keychainManager
-            ))
+        NavigationView {
+            HomeView()
+                .environmentObject(AppNavigationManager.preview)
+                .environmentObject(AuthManager(
+                    authService: AppEnvironment.shared.authService,
+                    sessionManager: AppEnvironment.shared.sessionManager,
+                    keychainManager: AppEnvironment.shared.keychainManager
+                ))
+        }
     }
 }
 #endif

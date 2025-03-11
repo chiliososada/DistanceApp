@@ -15,12 +15,39 @@
 import SwiftUI
 import Combine
 
+
+// 标签页枚举
+enum Tab: String, Identifiable, CaseIterable {
+    case home, profile, settings
+    
+    var id: String { self.rawValue }
+    
+    var icon: String {
+        switch self {
+        case .home: return "house.fill"
+        case .profile: return "person.fill"
+        case .settings: return "gear"
+        }
+    }
+    
+    var title: String {
+        switch self {
+        case .home: return "首页"
+        case .profile: return "我的"
+        case .settings: return "设置"
+        }
+    }
+}
 // MARK: - Protocol
 protocol NavigationManagerProtocol {
     var navigationPath: NavigationPath { get }
     var isPresentingSheet: Bool { get }
+    var selectedTab: Tab { get set }
     
     func navigate(to route: AppRoute)
+    func switchTab(to tab: Tab)
+    func navigateWithTab(tab: Tab, route: AppRoute)
+    func present(_ route: AppRoute)
     func dismiss()
     func popToRoot()
     func goBack()
@@ -28,9 +55,11 @@ protocol NavigationManagerProtocol {
 }
 
 // MARK: - Implementation
+// MARK: - Implementation
 final class AppNavigationManager: ObservableObject, NavigationManagerProtocol {
     // MARK: - Published Properties
     @Published var navigationPath = NavigationPath()
+    @Published var selectedTab: Tab = .home
     @Published var presentedSheet: AppRoute?
     @Published var isPresentingSheet = false
     
@@ -50,6 +79,12 @@ final class AppNavigationManager: ObservableObject, NavigationManagerProtocol {
         $navigationPath
             .dropFirst()
             .sink { _ in Logger.debug("Navigation: Navigation path changed") }
+            .store(in: &cancellables)
+        
+        // 监听标签页选择变化
+        $selectedTab
+            .dropFirst()
+            .sink { Logger.debug("Navigation: Tab selection changed to: \($0)") }
             .store(in: &cancellables)
         
         // 监听弹出表单变化
@@ -73,6 +108,19 @@ final class AppNavigationManager: ObservableObject, NavigationManagerProtocol {
             guard let self = self else { return }
             self.navigationPath.append(route)
         }
+    }
+    
+    // 切换标签页
+    func switchTab(to tab: Tab) {
+        Logger.info("Switching to tab: \(tab)")
+        selectedTab = tab
+    }
+    
+    // 导航到特定标签页并显示路由
+    func navigateWithTab(tab: Tab, route: AppRoute) {
+        Logger.info("Navigating to tab: \(tab) with route: \(route)")
+        selectedTab = tab
+        navigate(to: route)
     }
     
     func present(_ route: AppRoute) {
@@ -102,6 +150,7 @@ final class AppNavigationManager: ObservableObject, NavigationManagerProtocol {
     func resetNavigation() {
         Logger.info("Resetting navigation state")
         navigationPath = NavigationPath()
+        selectedTab = .home
         isPresentingSheet = false
         presentedSheet = nil
     }

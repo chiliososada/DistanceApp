@@ -180,7 +180,6 @@ struct LoginView: View {
     private func navigateTo(_ route: AppRoute) {
         navigationManager.navigate(to: route)
     }
-    
     // MARK: - 登录方法
     private func login() {
         Logger.debug("登录按钮被点击")

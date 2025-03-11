@@ -1,10 +1,3 @@
-//
-//  ContentView.swift
-//  DistanceApp
-//
-//  Created by toyousoft on 2025/03/04.
-//
-
 import SwiftUI
 
 struct ContentView: View {
@@ -14,48 +7,115 @@ struct ContentView: View {
     @EnvironmentObject private var authManager: AuthManager
     
     var body: some View {
-        ZStack {
-            if !environment.isInitialized {
-                // 初始加载视图
-                LoadingView(message: "正在加载...")
-                    .task {
-                        await environment.initialize()
-                    }
-            } else if environment.isAuthenticated {
-                // 已认证：主应用界面
-                authenticatedView
-                //updateprofile
-            } else {
-                // 未认证：认证流程
-                AuthenticationFlowView()
+        NavigationStack(path: $navigationManager.navigationPath) {
+            Group {
+                if !environment.isInitialized {
+                    // 初始加载视图
+                    LoadingView(message: "正在加载...")
+                        .task {
+                            await environment.initialize()
+                        }
+                } else if environment.isAuthenticated {
+                    // 已认证：主应用界面
+                    mainTabView
+                        .navigationDestination(for: AppRoute.self) { route in
+                            destinationView(for: route)
+                        }
+                } else {
+                    // 未认证：认证流程
+                    LoginView()
+                        .navigationDestination(for: AppRoute.self) { route in
+                            authDestinationView(for: route)
+                        }
+                }
+            }
+            .sheet(isPresented: $navigationManager.isPresentingSheet) {
+                if let route = navigationManager.presentedSheet {
+                    sheetView(for: route)
+                }
             }
         }
         .preferredColorScheme(environment.systemTheme)
     }
     
-    // 已认证状态视图
-    private var authenticatedView: some View {
-        TabView {
-            // 首页标签
+    // 主标签页视图
+    private var mainTabView: some View {
+        TabView(selection: $navigationManager.selectedTab) {
             HomeView()
                 .tabItem {
                     Label("首页", systemImage: "house.fill")
                 }
+                .tag(Tab.home)
             
-            // 个人资料标签
             Text("个人资料") // 替换为实际的ProfileView
                 .tabItem {
                     Label("我的", systemImage: "person.fill")
                 }
+                .tag(Tab.profile)
             
-            // 设置标签
             Text("设置") // 替换为实际的SettingsView
                 .tabItem {
                     Label("设置", systemImage: "gear")
                 }
+                .tag(Tab.settings)
         }
-        .environmentObject(navigationManager)
-        .environmentObject(authManager)
+    }
+    
+    // 目标视图构建器
+    @ViewBuilder
+    private func destinationView(for route: AppRoute) -> some View {
+        switch route {
+        case .login:
+            LoginView()
+        case .register:
+            RegisterView()
+        case .forgotPassword:
+            ForgotPasswordView()
+        case .verifyEmail:
+            VerifyEmailView()
+        case .completeProfile:
+            CompleteProfileView()
+        case .home:
+            HomeView()
+        case .profile:
+            Text("用户资料页面")
+        case .settings:
+            Text("设置页面")
+        case .changePassword:
+            Text("修改密码页面")
+        case .accountSettings:
+            Text("账户设置页面")
+        case .deleteAccount:
+            Text("删除账户页面")
+        }
+    }
+    
+    // 认证流程视图构建器
+    @ViewBuilder
+    private func authDestinationView(for route: AppRoute) -> some View {
+        switch route {
+        case .register:
+            RegisterView()
+        case .forgotPassword:
+            ForgotPasswordView()
+        case .verifyEmail:
+            VerifyEmailView()
+        case .completeProfile:
+            CompleteProfileView()
+        default:
+            Text("未实现的认证页面: \(route.title)")
+        }
+    }
+    
+    // 表单视图构建器
+    @ViewBuilder
+    private func sheetView(for route: AppRoute) -> some View {
+        switch route {
+        case .forgotPassword:
+            ForgotPasswordView()
+        default:
+            Text("未实现的表单: \(route.title)")
+        }
     }
 }
 
