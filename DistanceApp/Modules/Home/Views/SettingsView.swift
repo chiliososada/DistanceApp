@@ -16,7 +16,8 @@ struct SettingsView: View {
     // 添加初始化器以确保环境对象正确传递
     init() {
         // 确保视图正确初始化
-        print("SettingsView初始化")
+        print("SettingsView初始化1")
+        print("SettingsView初始化2")
     }
     
     // 状态变量
