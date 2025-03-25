@@ -588,6 +588,11 @@ struct TabStateScrollView<Content: View>: View {
     // MARK: - State
     @State private var isVisible: Bool = true
     @State private var lastOffset: CGFloat = 0
+    @State private var initialOffset: CGFloat? = nil
+    
+    // 滑动和顶部判断的阈值
+    private let scrollThreshold: CGFloat = 10
+    private let topThreshold: CGFloat = 5
     
     // MARK: - Initialization
     init(
@@ -609,26 +614,52 @@ struct TabStateScrollView<Content: View>: View {
                     GeometryReader { proxy in
                         Color.clear
                             .preference(key: OffsetPreferenceKey.self, value: proxy.frame(in: .global).minY)
+                            .onAppear {
+                                // 记录初始偏移量，用于判断顶部位置
+                                initialOffset = proxy.frame(in: .global).minY
+                            }
                     }
                 )
         }
         .onPreferenceChange(OffsetPreferenceKey.self) { offset in
+            // 确保初始偏移量已设置
+            guard let initialOffset = initialOffset else {
+                self.initialOffset = offset
+                return
+            }
+            
+            // 计算滑动方向
             let direction = offset - lastOffset
             
-            if direction < -10 && isVisible {
-                isVisible = false
-                onStateChange(false)
-            } else if direction > 10 && !isVisible {
+            // 判断是否在顶部区域
+            let isAtOrNearTop = offset >= initialOffset - topThreshold
+            
+            // 更新导航栏显示状态
+            if abs(direction) > scrollThreshold {
+                if direction < 0 && isVisible && !isAtOrNearTop {
+                    // 向下滑动且不在顶部区域，隐藏导航栏
+                    isVisible = false
+                    onStateChange(false)
+                } else if direction > 0 && !isVisible {
+                    // 向上滑动，显示导航栏
+                    isVisible = true
+                    onStateChange(true)
+                }
+            }
+            
+            // 在顶部区域时强制显示导航栏
+            if isAtOrNearTop && !isVisible {
                 isVisible = true
                 onStateChange(true)
             }
             
+            // 更新上次偏移量
             lastOffset = offset
         }
     }
 }
 
-// 定义偏好键用于跟踪滚动偏移量
+// 保持原有的 OffsetPreferenceKey 定义
 struct OffsetPreferenceKey: PreferenceKey {
     static var defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
