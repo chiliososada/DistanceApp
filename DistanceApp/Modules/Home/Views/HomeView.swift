@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 // MARK: - HomeView
 struct HomeView: View {
@@ -6,10 +7,19 @@ struct HomeView: View {
     @EnvironmentObject private var navigationManager: AppNavigationManager
     @EnvironmentObject private var authManager: AuthManager
     
+    // ViewModel
+    @StateObject private var viewModel = HomeViewModel()
+    
     // 状态变量
     @State private var searchText = ""
-    @State private var isRefreshing = false
     @State private var isNavBarVisible = true
+    @State private var debouncedSearch = ""
+    @State private var searchWorkItem: DispatchWorkItem?
+    
+    // 常量
+    private let navBarHeight: CGFloat = 44
+    private let searchBarHeight: CGFloat = 40
+    private let totalHeaderHeight: CGFloat = 92
     
     var body: some View {
         ZStack(alignment: .top) {
@@ -23,15 +33,21 @@ struct HomeView: View {
                 SearchAndFilterView(search: $searchText)
                     .padding(.vertical, 2)
                     .padding(.bottom, 8)
+                    .onChange(of: searchText) { newValue in
+                        debounceSearchText(newValue)
+                    }
             }
-            .frame(height: 92)
+            .frame(height: totalHeaderHeight)
             .background(Color.white)
-            .offset(y: isNavBarVisible ? 0 : -92)
+            .offset(y: isNavBarVisible ? 0 : -totalHeaderHeight)
             .opacity(isNavBarVisible ? 1 : 0)
             .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isNavBarVisible)
         }
         .background(Color.white)
         .navigationBarHidden(true)
+        .onAppear {
+            viewModel.loadInitialData()
+        }
     }
     
     // 自定义导航栏
@@ -40,7 +56,6 @@ struct HomeView: View {
             // 左侧菜单按钮
             Button(action: {
                 // 触发侧边菜单
-               // navigationManager.toggleMenu()
             }) {
                 Image(systemName: "line.horizontal.3")
                     .resizable()
@@ -76,14 +91,13 @@ struct HomeView: View {
             }
         }
         .padding(.horizontal)
-        .frame(height: 44)
+        .frame(height: navBarHeight)
         .background(Color.white)
     }
     
     // 主内容区
     private var mainContent: some View {
-        TabStateScrollView(
-            axis: .vertical,
+        OptimizedScrollView(
             showsIndicator: true,
             onStateChange: { isVisible in
                 isNavBarVisible = isVisible
@@ -92,7 +106,9 @@ struct HomeView: View {
             LazyVStack(spacing: 16) {
                 // 添加固定高度的占位空间
                 Color.clear
-                    .frame(height: 92)
+                    .frame(height: totalHeaderHeight)
+                
+            
                 
                 // 热门话题
                 trendingTopicsSection
@@ -107,6 +123,9 @@ struct HomeView: View {
             .padding(.horizontal)
             .padding(.top, 8)
         }
+        .pullToRefresh(isShowing: $viewModel.isRefreshing, onRefresh: {
+            viewModel.refresh()
+        })
     }
     
     // 热门话题区域
@@ -117,44 +136,76 @@ struct HomeView: View {
                 .fontWeight(.bold)
             
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 16) {
-                    ForEach(trendingTopics) { topic in
+                LazyHStack(spacing: 16) {
+                    ForEach(viewModel.trendingTopics) { topic in
                         trendingTopicCard(topic: topic)
+                            .id(topic.id)
                     }
                 }
+                .padding(.horizontal)
             }
         }
         .padding(.vertical)
     }
     
-    // 话题分类区域
+    // 话题分类区域 - 使用常量缓存
     private var topicCategoriesSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        let cachedCategories = topicCategories
+        
+        return VStack(alignment: .leading, spacing: 12) {
             Text("话题分类")
                 .font(.headline)
                 .fontWeight(.bold)
             
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 16) {
-                    ForEach(topicCategories, id: \.name) { category in
+                LazyHStack(spacing: 16) {
+                    ForEach(cachedCategories, id: \.name) { category in
                         categoryItem(category: category)
                     }
                 }
+                .padding(.horizontal)
             }
         }
         .padding(.vertical)
     }
     
-    // 最新话题区域
+    // 最新话题区域 - 支持分页加载
     private var recentTopicsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("最新发布")
                 .font(.headline)
                 .fontWeight(.bold)
             
-            ForEach(recentTopics) { topic in
-                TopicCard(topic: topic)
-                    .padding(.bottom, 8)
+            // 过滤话题
+            let filteredTopics = debouncedSearch.isEmpty ?
+                viewModel.recentTopics :
+                viewModel.filterTopics(searchText: debouncedSearch)
+            
+            if filteredTopics.isEmpty {
+                Text("未找到匹配的话题")
+                    .font(.subheadline)
+                    .foregroundColor(.gray)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 30)
+            } else {
+                ForEach(filteredTopics) { topic in
+                    TopicCard(topic: topic)
+                        .padding(.bottom, 8)
+                        .id(topic.id)
+                        .onAppear {
+                            // 如果显示了最后一个项目，并且没有在搜索，加载更多
+                            if topic.id == filteredTopics.last?.id && debouncedSearch.isEmpty {
+                                viewModel.loadMoreTopics()
+                            }
+                        }
+                }
+            }
+            
+            // 加载更多指示器
+            if viewModel.isLoadingMore && debouncedSearch.isEmpty {
+                ProgressView()
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding()
             }
         }
         .padding(.vertical)
@@ -268,7 +319,26 @@ struct HomeView: View {
         .frame(width: 80)
     }
     
-    // 测试数据
+    // 搜索防抖实现
+    private func debounceSearchText(_ text: String) {
+        // 取消之前的任务
+        searchWorkItem?.cancel()
+        
+        // 创建新任务
+        let workItem = DispatchWorkItem {
+            DispatchQueue.main.async {
+                self.debouncedSearch = text
+            }
+        }
+        
+        // 存储任务引用
+        searchWorkItem = workItem
+        
+        // 延迟执行
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: workItem)
+    }
+    
+    // 缓存的话题分类数据
     private let topicCategories = [
         TopicCategory(name: "美食", icon: "fork.knife", color: .orange),
         TopicCategory(name: "购物", icon: "cart", color: .blue),
@@ -277,119 +347,95 @@ struct HomeView: View {
         TopicCategory(name: "旅行", icon: "airplane", color: .green),
         TopicCategory(name: "求助", icon: "questionmark.circle", color: .red)
     ]
-    
-    private var trendingTopics: [Topic] = [
-        Topic(
-            id: "1",
-            title: "新宿御苑赏樱花",
-            content: "有人明天一起去新宿御苑赏樱花吗？预计花期正好，想找几个人一起去。",
-            authorName: "樱花爱好者",
-            location: "新宿区",
-            tags: ["赏樱", "周末活动"],
-            participantsCount: 15,
-            postedTime: "2小时前",
-            distance: 0.5,
-            isLiked: false,
-            images: ["cherry1"]
-        ),
-        Topic(
-            id: "2",
-            title: "歌舞伎町酒吧推荐",
-            content: "刚到东京，有人能推荐歌舞伎町有哪些适合外国人的酒吧吗？",
-            authorName: "旅行者小明",
-            location: "歌舞伎町",
-            tags: ["夜生活", "酒吧"],
-            participantsCount: 23,
-            postedTime: "5小时前",
-            distance: 1.2,
-            isLiked: true,
-            images: []
-        ),
-        Topic(
-            id: "3",
-            title: "求购Switch游戏",
-            content: "有人知道新宿哪里可以买到便宜的二手Switch游戏吗？特别想找塞尔达传说。",
-            authorName: "游戏迷",
-            location: "新宿站",
-            tags: ["游戏", "二手交易"],
-            participantsCount: 8,
-            postedTime: "昨天",
-            distance: 0.8,
-            isLiked: false,
-            images: ["switch1"]
-        ),
-        Topic(
-            id: "4",
-            title: "今晚演唱会",
-            content: "今晚在新宿Loft有个地下乐队演出，有人一起去吗？",
-            authorName: "音乐发烧友",
-            location: "新宿Loft",
-            tags: ["音乐", "演唱会"],
-            participantsCount: 32,
-            postedTime: "3小时前",
-            distance: 1.5,
-            isLiked: false,
-            images: ["concert1"]
-        )
-    ]
-    
-    private var recentTopics: [Topic] = [
-        Topic(
-            id: "5",
-            title: "求推荐拉面店",
-            content: "刚搬到新宿，有什么好吃的拉面店推荐吗？最好是本地人喜欢去的那种。刚搬到新宿，有什么好吃的拉面店推荐吗？最好是本地人喜欢去的那种。刚搬到新宿，有什么好吃的拉面店推荐吗？最好是本地人喜欢去的那种。刚搬到新宿，有什么好吃的拉面店推荐吗？最好是本地人喜欢去的那种。刚搬到新宿，有什么好吃的拉面店推荐吗？最好是本地人喜欢去的那种。刚搬到新宿，有什么好吃的拉面店推荐吗？最好是本地人喜欢去的那种。刚搬到新宿，有什么好吃的拉面店推荐吗？最好是本地人喜欢去的那种。",
-            authorName: "吃货小王",
-            location: "新宿站西口",
-            tags: ["美食", "拉面"],
-            participantsCount: 7,
-            postedTime: "30分钟前",
-            distance: 0.3,
-            isLiked: false,
-            images: []
-        ),
-        Topic(
-            id: "6",
-            title: "新宿中央公园晨练",
-            content: "每天早上6点在新宿中央公园有晨练小组，欢迎附近的朋友加入！",
-            authorName: "健身达人",
-            location: "新宿中央公园",
-            tags: ["运动", "晨练"],
-            participantsCount: 12,
-            postedTime: "1小时前",
-            distance: 1.0,
-            isLiked: true,
-            images: ["park1"]
-        ),
-        Topic(
-            id: "7",
-            title: "寻找共享办公室",
-            content: "有人知道新宿附近有什么价格合理的共享办公空间吗？最好有月租选项。",
-            authorName: "自由职业者",
-            location: "新宿区",
-            tags: ["工作", "共享空间"],
-            participantsCount: 4,
-            postedTime: "2小时前",
-            distance: 0.7,
-            isLiked: false,
-            images: []
-        ),
-        Topic(
-            id: "8",
-            title: "卖二手自行车",
-            content: "搬家需要出售一辆9成新的通勤自行车，有需要的可以联系我。",
-            authorName: "搬家达人",
-            location: "高田马场",
-            tags: ["二手", "自行车"],
-            participantsCount: 2,
-            postedTime: "45分钟前",
-            distance: 2.5,
-            isLiked: false,
-            images: ["bike1"]
-        )
-    ]
 }
 
-// MARK: - TopicCard
+// MARK: - 优化的滚动视图组件
+struct OptimizedScrollView<Content: View>: View {
+    // 配置
+    var showsIndicator: Bool
+    var onStateChange: (Bool) -> Void
+    var content: () -> Content
+    
+    // 状态
+    @State private var isVisible: Bool = true
+    @State private var lastOffset: CGFloat = 0
+    @State private var initialOffset: CGFloat? = nil
+    @State private var lastUpdateTime: Date = Date()
+    
+    // 滚动相关常量
+    private let scrollThreshold: CGFloat = 10
+    private let topThreshold: CGFloat = 5
+    private let updateThreshold: TimeInterval = 0.08 // 80毫秒节流
+    
+    init(
+        showsIndicator: Bool = true,
+        onStateChange: @escaping (Bool) -> Void,
+        @ViewBuilder content: @escaping () -> Content
+    ) {
+        self.showsIndicator = showsIndicator
+        self.onStateChange = onStateChange
+        self.content = content
+    }
+    
+    var body: some View {
+        ScrollView(showsIndicators: showsIndicator) {
+            content()
+                .overlay(
+                    GeometryReader { proxy in
+                        Color.clear
+                            .preference(key: OffsetPreferenceKey.self, value: proxy.frame(in: .global).minY)
+                            .onAppear {
+                                initialOffset = proxy.frame(in: .global).minY
+                            }
+                    }
+                )
+        }
+        .onPreferenceChange(OffsetPreferenceKey.self) { offset in
+            // 确保初始偏移量已设置
+            guard let initialOffset = initialOffset else {
+                self.initialOffset = offset
+                return
+            }
+            
+            // 添加节流逻辑
+            let now = Date()
+            guard now.timeIntervalSince(lastUpdateTime) >= updateThreshold else { return }
+            
+            // 计算滑动方向
+            let direction = offset - lastOffset
+            
+            // 判断是否在顶部区域
+            let isAtOrNearTop = offset >= initialOffset - topThreshold
+            
+            // 更新导航栏显示状态
+            if abs(direction) > scrollThreshold {
+                if direction < 0 && isVisible && !isAtOrNearTop {
+                    // 向下滑动且不在顶部区域，隐藏导航栏
+                    isVisible = false
+                    onStateChange(false)
+                    lastUpdateTime = now
+                } else if direction > 0 && !isVisible {
+                    // 向上滑动，显示导航栏
+                    isVisible = true
+                    onStateChange(true)
+                    lastUpdateTime = now
+                }
+            }
+            
+            // 在顶部区域时强制显示导航栏
+            if isAtOrNearTop && !isVisible {
+                isVisible = true
+                onStateChange(true)
+                lastUpdateTime = now
+            }
+            
+            // 更新上次偏移量
+            lastOffset = offset
+        }
+    }
+}
+
+// MARK: - TopicCard和其子组件
 struct TopicCard: View {
     let topic: Topic
     @State private var isLiked: Bool
@@ -401,54 +447,102 @@ struct TopicCard: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // 作者信息和点赞按钮
-            HStack(alignment: .center) {
-                // 头像和作者信息
-                HStack(spacing: 8) {
-                    Image(systemName: "person.circle.fill")
-                        .resizable()
-                        .frame(width: 40, height: 40)
-                        .foregroundColor(.gray)
+            // 头部
+            TopicCardHeader(
+                authorName: topic.authorName,
+                location: topic.location,
+                isLiked: $isLiked
+            )
+            
+            // 标题和内容
+            TopicCardContent(
+                title: topic.title,
+                content: topic.content,
+                images: topic.images
+            )
+            
+            // 标签
+            if !topic.tags.isEmpty {
+                TopicCardTags(tags: topic.tags)
+            }
+            
+            // 底部信息
+            TopicCardFooter(
+                participantsCount: topic.participantsCount,
+                postedTime: topic.postedTime,
+                distance: topic.distance
+            )
+        }
+        .padding()
+        .background(Color.white)
+        .cornerRadius(12)
+        .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
+    }
+}
+
+struct TopicCardHeader: View {
+    let authorName: String
+    let location: String
+    @Binding var isLiked: Bool
+    
+    var body: some View {
+        HStack(alignment: .center) {
+            // 头像和作者信息
+            HStack(spacing: 8) {
+                Image(systemName: "person.circle.fill")
+                    .resizable()
+                    .frame(width: 40, height: 40)
+                    .foregroundColor(.gray)
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(authorName)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
                     
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(topic.authorName)
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                        
-                        HStack {
-                            Image(systemName: "location.circle.fill")
-                                .foregroundColor(.gray)
-                                .font(.caption2)
-                            Text(topic.location)
-                                .font(.caption)
-                                .foregroundColor(.gray)
-                        }
+                    HStack {
+                        Image(systemName: "location.circle.fill")
+                            .foregroundColor(.gray)
+                            .font(.caption2)
+                        Text(location)
+                            .font(.caption)
+                            .foregroundColor(.gray)
                     }
-                }
-                
-                Spacer()
-                
-                // 点赞按钮
-                Button(action: {
-                    isLiked.toggle()
-                }) {
-                    Image(systemName: isLiked ? "heart.fill" : "heart")
-                        .foregroundColor(isLiked ? .red : .gray)
                 }
             }
             
-            // 标题和内容
-            Text(topic.title)
+            Spacer()
+            
+            // 点赞按钮
+            Button(action: {
+                withAnimation(.spring()) {
+                    isLiked.toggle()
+                }
+            }) {
+                Image(systemName: isLiked ? "heart.fill" : "heart")
+                    .foregroundColor(isLiked ? .red : .gray)
+            }
+        }
+    }
+}
+
+struct TopicCardContent: View {
+    let title: String
+    let content: String
+    let images: [String]
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
                 .font(.headline)
                 .fontWeight(.bold)
             
-            Text(topic.content)
+            Text(content)
                 .font(.subheadline)
                 .foregroundColor(.black)
                 .lineLimit(3)
             
             // 图片（如果有）
-            if !topic.images.isEmpty {
+            if !images.isEmpty {
                 ZStack {
                     RoundedRectangle(cornerRadius: 8)
                         .fill(Color.gray.opacity(0.2))
@@ -462,66 +556,72 @@ struct TopicCard: View {
                 }
                 .frame(maxWidth: .infinity)
             }
-            
-            // 标签
-            if !topic.tags.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack {
-                        ForEach(topic.tags, id: \.self) { tag in
-                            Text(tag)
-                                .font(.caption)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 5)
-                                .background(Color.blue.opacity(0.1))
-                                .foregroundColor(.blue)
-                                .cornerRadius(15)
-                        }
-                    }
-                }
-            }
-            
-            // 底部信息
-            HStack {
-                // 参与人数
-                HStack(spacing: 4) {
-                    Image(systemName: "person.2")
-                        .font(.caption)
-                    Text("\(topic.participantsCount)人参与")
-                        .font(.caption)
-                }
-                .foregroundColor(.gray)
-                
-                Spacer()
-                
-                // 发布时间
-                HStack(spacing: 4) {
-                    Image(systemName: "clock")
-                        .font(.caption)
-                    Text(topic.postedTime)
-                        .font(.caption)
-                }
-                .foregroundColor(.gray)
-                
-                Spacer()
-                
-                // 距离
-                HStack(spacing: 4) {
-                    Image(systemName: "location")
-                        .font(.caption)
-                    Text("\(topic.distance)km")
-                        .font(.caption)
-                }
-                .foregroundColor(.gray)
-            }
         }
-        .padding()
-        .background(Color.white)
-        .cornerRadius(12)
-        .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
     }
 }
 
-// MARK: - SearchAndFilterView
+struct TopicCardTags: View {
+    let tags: [String]
+    
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            LazyHStack {
+                ForEach(tags, id: \.self) { tag in
+                    Text(tag)
+                        .font(.caption)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(Color.blue.opacity(0.1))
+                        .foregroundColor(.blue)
+                        .cornerRadius(15)
+                }
+            }
+        }
+    }
+}
+
+struct TopicCardFooter: View {
+    let participantsCount: Int
+    let postedTime: String
+    let distance: Double
+    
+    var body: some View {
+        HStack {
+            // 参与人数
+            HStack(spacing: 4) {
+                Image(systemName: "person.2")
+                    .font(.caption)
+                Text("\(participantsCount)人参与")
+                    .font(.caption)
+            }
+            .foregroundColor(.gray)
+            
+            Spacer()
+            
+            // 发布时间
+            HStack(spacing: 4) {
+                Image(systemName: "clock")
+                    .font(.caption)
+                Text(postedTime)
+                    .font(.caption)
+            }
+            .foregroundColor(.gray)
+            
+            Spacer()
+            
+            // 距离
+            HStack(spacing: 4) {
+                Image(systemName: "location")
+                    .font(.caption)
+                Text("\(distance)km")
+                    .font(.caption)
+            }
+            .foregroundColor(.gray)
+        }
+    }
+}
+
+// MARK: - 优化的搜索和筛选组件
 struct SearchAndFilterView: View {
     @Binding var search: String
     @State private var isShowingFilter = false
@@ -538,8 +638,7 @@ struct SearchAndFilterView: View {
                     .padding(.vertical, 2)
                     .font(.system(size: 14, weight: .regular))
                     .foregroundColor(.black)
-                    .accentColor(.gray)
-                    .textInputAutocapitalization(.none)
+                    .autocapitalization(.none)
                     .disableAutocorrection(true)
             }
             .padding(8)
@@ -577,93 +676,55 @@ struct SearchAndFilterView: View {
     }
 }
 
-// MARK: - TabStateScrollView
-struct TabStateScrollView<Content: View>: View {
-    // MARK: - Properties
-    var axis: Axis.Set
-    var showsIndicator: Bool
-    var onStateChange: (Bool) -> Void
-    var content: Content
-    
-    // MARK: - State
-    @State private var isVisible: Bool = true
-    @State private var lastOffset: CGFloat = 0
-    @State private var initialOffset: CGFloat? = nil
-    
-    // 滑动和顶部判断的阈值
-    private let scrollThreshold: CGFloat = 10
-    private let topThreshold: CGFloat = 5
-    
-    // MARK: - Initialization
-    init(
-        axis: Axis.Set,
-        showsIndicator: Bool,
-        onStateChange: @escaping (Bool) -> Void,
-        @ViewBuilder content: @escaping () -> Content
-    ) {
-        self.axis = axis
-        self.showsIndicator = showsIndicator
-        self.onStateChange = onStateChange
-        self.content = content()
-    }
-    
-    var body: some View {
-        ScrollView(axis, showsIndicators: showsIndicator) {
-            content
-                .overlay(
-                    GeometryReader { proxy in
-                        Color.clear
-                            .preference(key: OffsetPreferenceKey.self, value: proxy.frame(in: .global).minY)
-                            .onAppear {
-                                // 记录初始偏移量，用于判断顶部位置
-                                initialOffset = proxy.frame(in: .global).minY
-                            }
-                    }
-                )
-        }
-        .onPreferenceChange(OffsetPreferenceKey.self) { offset in
-            // 确保初始偏移量已设置
-            guard let initialOffset = initialOffset else {
-                self.initialOffset = offset
-                return
-            }
-            
-            // 计算滑动方向
-            let direction = offset - lastOffset
-            
-            // 判断是否在顶部区域
-            let isAtOrNearTop = offset >= initialOffset - topThreshold
-            
-            // 更新导航栏显示状态
-            if abs(direction) > scrollThreshold {
-                if direction < 0 && isVisible && !isAtOrNearTop {
-                    // 向下滑动且不在顶部区域，隐藏导航栏
-                    isVisible = false
-                    onStateChange(false)
-                } else if direction > 0 && !isVisible {
-                    // 向上滑动，显示导航栏
-                    isVisible = true
-                    onStateChange(true)
-                }
-            }
-            
-            // 在顶部区域时强制显示导航栏
-            if isAtOrNearTop && !isVisible {
-                isVisible = true
-                onStateChange(true)
-            }
-            
-            // 更新上次偏移量
-            lastOffset = offset
-        }
-    }
-}
-
-// 保持原有的 OffsetPreferenceKey 定义
+// MARK: - 偏移量PreferenceKey
 struct OffsetPreferenceKey: PreferenceKey {
     static var defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = nextValue()
+    }
+}
+
+// MARK: - 下拉刷新修饰器
+struct PullToRefresh: ViewModifier {
+    @Binding var isShowing: Bool
+    let onRefresh: () -> Void
+    @State private var offset: CGFloat = 0
+    
+    private let threshold: CGFloat = 80
+    
+    func body(content: Content) -> some View {
+        ZStack(alignment: .top) {
+            // 添加明确的刷新指示器
+            if isShowing {
+                ProgressView("下拉刷新中...")
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 10)
+                    .zIndex(1) // 确保显示在最上层
+            }
+            
+            GeometryReader { geometry in
+                content
+                    .offset(y: isShowing ? threshold : 0)
+                    .onChange(of: offset) { newValue in
+                        if newValue > threshold && !isShowing {
+                            isShowing = true
+                            onRefresh()
+                        }
+                    }
+                    .preference(key: OffsetPreferenceKey.self, value: geometry.frame(in: .global).minY)
+            }
+            .onPreferenceChange(OffsetPreferenceKey.self) { value in
+                if value > 0 {
+                    offset = value
+                }
+            }
+        }
+    }
+}
+
+extension View {
+    func pullToRefresh(isShowing: Binding<Bool>, onRefresh: @escaping () -> Void) -> some View {
+        self.modifier(PullToRefresh(isShowing: isShowing, onRefresh: onRefresh))
     }
 }
 
@@ -693,7 +754,7 @@ struct TopicCategory {
 struct HomeView_Previews: PreviewProvider {
     static var previews: some View {
         HomeView()
-            .environmentObject(AppNavigationManager.preview)
+            .environmentObject(AppNavigationManager.shared)
             .environmentObject(AuthManager(
                 authService: AppEnvironment.shared.authService,
                 sessionManager: AppEnvironment.shared.sessionManager,
