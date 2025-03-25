@@ -8,7 +8,7 @@ struct HomeView: View {
     @EnvironmentObject private var authManager: AuthManager
     
     // ViewModel
-    @StateObject private var viewModel = HomeViewModel()
+    @StateObject private var viewModel: HomeViewModel
     
     // 状态变量
     @State private var searchText = ""
@@ -20,7 +20,12 @@ struct HomeView: View {
     private let navBarHeight: CGFloat = 44
     private let searchBarHeight: CGFloat = 40
     private let totalHeaderHeight: CGFloat = 92
-    
+    // 添加初始化方法
+    init() {
+        // 使用环境中注册的PostService
+        let postService = AppEnvironment.shared.postService
+        _viewModel = StateObject(wrappedValue: HomeViewModel(postService: postService))
+    }
     var body: some View {
         ZStack(alignment: .top) {
             // 主内容区

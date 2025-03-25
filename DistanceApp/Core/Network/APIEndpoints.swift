@@ -24,6 +24,7 @@ enum APIEndpoint {
     case checkSession
     case updateProfile(params: [String: Any])
     case signout
+    case getTopics(findby: String, max: Int, recency: Int)
     // MARK: - HTTP Headers
     var headers: [String: String] {
         var headers = ["Content-Type": "application/json"]
@@ -35,7 +36,7 @@ enum APIEndpoint {
         switch self {
         case .checkSession:
             return .get
-        case .register, .loginWithFirebaseToken:
+        case .register, .loginWithFirebaseToken,.getTopics:
             return .post
         case .signout:
             return .post
@@ -68,6 +69,8 @@ enum APIEndpoint {
             return "/api/v1/auth/checksession"
         case .updateProfile:
             return "/api/v1/auth/users/updateprofile"
+        case .getTopics:
+            return "/api/v1/auth/topics/findby"
         }
     }
     
@@ -76,7 +79,12 @@ enum APIEndpoint {
         switch self {
         case .loginWithFirebaseToken(let idToken):
             return ["id_token": idToken]
-            
+        case .getTopics(let findby, let max, let recency):
+            return DynamicParameters([
+                "findby": findby,
+                "max": max,
+                "recency": recency
+            ])
         case .updateProfile(let params):
             return DynamicParameters(params)
         case .signout:
@@ -92,6 +100,7 @@ enum APIEndpoint {
             
         case .checkSession:
             return nil
+            
         }
     }
 }

@@ -22,7 +22,7 @@ final class AppEnvironment: ObservableObject {
     let apiClient: APIClientProtocol
     let storageManager: StorageManagerProtocol
     let keychainManager: KeychainManagerProtocol
-    
+    let postService: PostServiceProtocol
     // 提供明确类型安全的访问
     var typedAuthManager: AuthManager {
         return authManager as! AuthManager
@@ -30,7 +30,9 @@ final class AppEnvironment: ObservableObject {
     var typedProfileService: ProfileService {
         return profileService as! ProfileService
     }
-    
+    var typedPostService: PostService {
+        return postService as! PostService
+    }
     // MARK: - Published Properties
     @Published var isAuthenticated: Bool = false
     @Published var isInitialized: Bool = false
@@ -71,6 +73,7 @@ final class AppEnvironment: ObservableObject {
             apiClient: apiClient,
             fileStorageManager: fileStorageManager
         )
+        self.postService =  PostService(apiClient: apiClient)
         self.navigationManager = AppNavigationManager()
         
         self.authManager = AuthManager(
