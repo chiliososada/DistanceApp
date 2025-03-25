@@ -239,7 +239,7 @@ final class AuthManager: ObservableObject, AuthManagerProtocol {
         do {
             // 1. Firebase 认证和获取令牌
             let (_, idToken) = try await authenticateWithFirebase()
-            
+           
             // 2. 调用后端API进行真正的登录
             let userProfile = try await authService.loginWithFirebaseToken(idToken)
             

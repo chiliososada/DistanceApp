@@ -51,7 +51,7 @@ final class AuthService: AuthServiceProtocol {
     func checkSession() async throws -> Bool {
         do {
             let response: APIResponse<SessionStatus> = try await apiClient.request(.checkSession)
-            
+            Logger.info("会话checkSession响应: \(response)")
             // 如果成功解析并且uid不为空，则认为会话有效
             return response.code == 0 && !response.data.uid.isEmpty
         } catch APIError.unauthorized {

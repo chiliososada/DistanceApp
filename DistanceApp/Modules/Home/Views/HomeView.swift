@@ -105,8 +105,8 @@ struct HomeView: View {
         ) {
             LazyVStack(spacing: 16) {
                 // 添加固定高度的占位空间
-                Color.clear
-                    .frame(height: totalHeaderHeight)
+//                Color.clear
+//                    .frame(height: totalHeaderHeight)
                 
             
                 

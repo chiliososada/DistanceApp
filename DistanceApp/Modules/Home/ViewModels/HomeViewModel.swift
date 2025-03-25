@@ -186,7 +186,65 @@ class HomeViewModel: ObservableObject {
         // 实际项目中，这里会有网络请求
         // 现在使用模拟数据
         
-        if page > 1 {
+        if page == 1 {
+            // 第一页时，重置数据为初始数据
+            let initialRecentTopics = [
+                Topic(
+                    id: "5",
+                    title: "求推荐拉面店",
+                    content: "刚搬到新宿，有什么好吃的拉面店推荐吗？最好是本地人喜欢去的那种。",
+                    authorName: "吃货小王",
+                    location: "新宿站西口",
+                    tags: ["美食", "拉面"],
+                    participantsCount: 7,
+                    postedTime: "30分钟前",
+                    distance: 0.3,
+                    isLiked: false,
+                    images: []
+                ),
+                Topic(
+                    id: "6",
+                    title: "新宿中央公园晨练",
+                    content: "每天早上6点在新宿中央公园有晨练小组，欢迎附近的朋友加入！",
+                    authorName: "健身达人",
+                    location: "新宿中央公园",
+                    tags: ["运动", "晨练"],
+                    participantsCount: 12,
+                    postedTime: "1小时前",
+                    distance: 1.0,
+                    isLiked: true,
+                    images: ["park1"]
+                ),
+                Topic(
+                    id: "7",
+                    title: "寻找共享办公室",
+                    content: "有人知道新宿附近有什么价格合理的共享办公空间吗？最好有月租选项。",
+                    authorName: "自由职业者",
+                    location: "新宿区",
+                    tags: ["工作", "共享空间"],
+                    participantsCount: 4,
+                    postedTime: "2小时前",
+                    distance: 0.7,
+                    isLiked: false,
+                    images: []
+                ),
+                Topic(
+                    id: "8",
+                    title: "卖二手自行车",
+                    content: "搬家需要出售一辆9成新的通勤自行车，有需要的可以联系我。",
+                    authorName: "搬家达人",
+                    location: "高田马场",
+                    tags: ["二手", "自行车"],
+                    participantsCount: 2,
+                    postedTime: "45分钟前",
+                    distance: 2.5,
+                    isLiked: false,
+                    images: ["bike1"]
+                )
+            ]
+            
+            recentTopics = initialRecentTopics
+        } else if page > 1 {
             // 加载更多页的数据，模拟分页加载
             let moreTopics = [
                 Topic(
@@ -220,7 +278,6 @@ class HomeViewModel: ObservableObject {
             recentTopics.append(contentsOf: moreTopics)
         }
     }
-    
     // 基于搜索文本过滤话题
     func filterTopics(searchText: String) -> [Topic] {
         guard !searchText.isEmpty else {
