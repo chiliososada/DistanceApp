@@ -20,12 +20,15 @@ struct HomeView: View {
     private let navBarHeight: CGFloat = 44
     private let searchBarHeight: CGFloat = 40
     private let totalHeaderHeight: CGFloat = 92
+    private let topContentPadding: CGFloat = 100 // 增加额外顶部间距避免遮挡
+    
     // 添加初始化方法
     init() {
         // 使用环境中注册的PostService
         let postService = AppEnvironment.shared.postService
         _viewModel = StateObject(wrappedValue: HomeViewModel(postService: postService))
     }
+    
     var body: some View {
         ZStack(alignment: .top) {
             // 主内容区
@@ -47,6 +50,7 @@ struct HomeView: View {
             .offset(y: isNavBarVisible ? 0 : -totalHeaderHeight)
             .opacity(isNavBarVisible ? 1 : 0)
             .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isNavBarVisible)
+            .zIndex(10) // 确保在最上层
         }
         .background(Color.white)
         .navigationBarHidden(true)
@@ -109,11 +113,9 @@ struct HomeView: View {
             }
         ) {
             LazyVStack(spacing: 16) {
-                // 添加固定高度的占位空间
-//                Color.clear
-//                    .frame(height: totalHeaderHeight)
-                
-            
+                // 顶部安全区域间距，避免被导航栏遮挡
+                Color.clear
+                    .frame(height: topContentPadding)
                 
                 // 热门话题
                 trendingTopicsSection
@@ -126,11 +128,25 @@ struct HomeView: View {
                     .padding(.bottom, 20)
             }
             .padding(.horizontal)
-            .padding(.top, 8)
+            .background(
+                // 在滚动到顶部时触发下拉刷新
+                GeometryReader { geo in
+                    if geo.frame(in: .global).minY > 80 && !viewModel.isRefreshing {
+                        Color.clear.onAppear {
+                            viewModel.refresh()
+                        }
+                    } else {
+                        Color.clear
+                    }
+                }
+            )
         }
-        .pullToRefresh(isShowing: $viewModel.isRefreshing, onRefresh: {
-            viewModel.refresh()
-        })
+        .onAppear {
+            // 首次加载
+            if viewModel.recentTopics.isEmpty && !viewModel.isLoading {
+                viewModel.loadInitialData()
+            }
+        }
     }
     
     // 热门话题区域
@@ -177,9 +193,18 @@ struct HomeView: View {
     // 最新话题区域 - 支持分页加载
     private var recentTopicsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("最新发布")
-                .font(.headline)
-                .fontWeight(.bold)
+            HStack {
+                Text("最新发布")
+                    .font(.headline)
+                    .fontWeight(.bold)
+                
+                Spacer()
+                
+                // 添加调试信息：当前页码和总条数
+                Text("第\(viewModel.currentPage)页，共\(viewModel.recentTopics.count)条")
+                    .font(.caption)
+                    .foregroundColor(.gray)
+            }
             
             // 过滤话题
             let filteredTopics = debouncedSearch.isEmpty ?
@@ -187,30 +212,78 @@ struct HomeView: View {
                 viewModel.filterTopics(searchText: debouncedSearch)
             
             if filteredTopics.isEmpty {
-                Text("未找到匹配的话题")
-                    .font(.subheadline)
-                    .foregroundColor(.gray)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.vertical, 30)
-            } else {
-                ForEach(filteredTopics) { topic in
-                    TopicCard(topic: topic)
-                        .padding(.bottom, 8)
-                        .id(topic.id)
-                        .onAppear {
-                            // 如果显示了最后一个项目，并且没有在搜索，加载更多
-                            if topic.id == filteredTopics.last?.id && debouncedSearch.isEmpty {
-                                viewModel.loadMoreTopics()
-                            }
-                        }
+                VStack {
+                    if viewModel.isLoading {
+                        ProgressView("加载中...")
+                    } else {
+                        Text("未找到匹配的话题")
+                            .font(.subheadline)
+                            .foregroundColor(.gray)
+                    }
                 }
-            }
-            
-            // 加载更多指示器
-            if viewModel.isLoadingMore && debouncedSearch.isEmpty {
-                ProgressView()
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding()
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.vertical, 30)
+            } else {
+                VStack(spacing: 12) {
+                    // 显示下拉刷新中状态
+                    if viewModel.isRefreshing {
+                        ProgressView("下拉刷新中...")
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .padding(.vertical, 10)
+                    }
+                    
+                    ForEach(filteredTopics) { topic in
+                        TopicCard(topic: topic)
+                            .padding(.bottom, 4)
+                            .id(topic.id)
+                            .onAppear {
+                                // 当显示到列表最后两条时触发加载更多
+                                let index = filteredTopics.firstIndex(where: { $0.id == topic.id }) ?? 0
+                                let threshold = filteredTopics.count - 2
+                                
+                                if index >= threshold && debouncedSearch.isEmpty && !viewModel.isLoadingMore {
+                                    viewModel.loadMoreTopics()
+                                }
+                            }
+                    }
+                    
+                    // 加载更多指示器
+                    if viewModel.isLoadingMore {
+                        ProgressView("加载更多中...")
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .padding(.vertical, 10)
+                    } else if !filteredTopics.isEmpty {
+                        // 用于触发底部滚动检测的空白视图
+                        Color.clear
+                            .frame(height: 20)
+                            .onAppear {
+                                if debouncedSearch.isEmpty && !viewModel.isLoadingMore {
+                                    viewModel.loadMoreTopics()
+                                }
+                            }
+                    }
+                    
+                    // 显示调试信息
+                    Text(viewModel.debugInfo)
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.top, 8)
+                    
+                    // 手动加载按钮（方便测试）
+                    Button(action: {
+                        viewModel.loadMoreTopics()
+                    }) {
+                        Text("手动加载更多")
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.blue)
+                            .foregroundColor(.white)
+                            .cornerRadius(8)
+                    }
+                    .padding(.vertical, 10)
+                    .disabled(viewModel.isLoadingMore)
+                }
             }
         }
         .padding(.vertical)
@@ -437,6 +510,14 @@ struct OptimizedScrollView<Content: View>: View {
             // 更新上次偏移量
             lastOffset = offset
         }
+    }
+}
+
+// MARK: - 偏移量PreferenceKey
+struct OffsetPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 }
 
@@ -678,58 +759,6 @@ struct SearchAndFilterView: View {
             Text("筛选选项")
                 .padding()
         }
-    }
-}
-
-// MARK: - 偏移量PreferenceKey
-struct OffsetPreferenceKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
-    }
-}
-
-// MARK: - 下拉刷新修饰器
-struct PullToRefresh: ViewModifier {
-    @Binding var isShowing: Bool
-    let onRefresh: () -> Void
-    @State private var offset: CGFloat = 0
-    
-    private let threshold: CGFloat = 80
-    
-    func body(content: Content) -> some View {
-        ZStack(alignment: .top) {
-            // 添加明确的刷新指示器
-            if isShowing {
-                ProgressView("下拉刷新中...")
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 10)
-                    .zIndex(1) // 确保显示在最上层
-            }
-            
-            GeometryReader { geometry in
-                content
-                    .offset(y: isShowing ? threshold : 0)
-                    .onChange(of: offset) { newValue in
-                        if newValue > threshold && !isShowing {
-                            isShowing = true
-                            onRefresh()
-                        }
-                    }
-                    .preference(key: OffsetPreferenceKey.self, value: geometry.frame(in: .global).minY)
-            }
-            .onPreferenceChange(OffsetPreferenceKey.self) { value in
-                if value > 0 {
-                    offset = value
-                }
-            }
-        }
-    }
-}
-
-extension View {
-    func pullToRefresh(isShowing: Binding<Bool>, onRefresh: @escaping () -> Void) -> some View {
-        self.modifier(PullToRefresh(isShowing: isShowing, onRefresh: onRefresh))
     }
 }
 
