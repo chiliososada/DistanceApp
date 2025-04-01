@@ -104,12 +104,19 @@ struct HomeView: View {
         .background(Color.white)
     }
     
-    // 主内容区
+    // 主内容区 
     private var mainContent: some View {
         OptimizedScrollView(
             showsIndicator: true,
             onStateChange: { isVisible in
                 isNavBarVisible = isVisible
+            },
+            onBottomReached: {
+                // 滚动到底部时触发加载更多
+                if !viewModel.isLoadingMore && !viewModel.isRefreshing && debouncedSearch.isEmpty && viewModel.hasMoreData {
+                    Logger.debug("滚动到底部，触发加载更多")
+                    viewModel.loadMoreTopics()
+                }
             }
         ) {
             LazyVStack(spacing: 16) {
@@ -125,6 +132,9 @@ struct HomeView: View {
                 
                 // 最新话题列表
                 recentTopicsSection
+                
+                // 加载更多区域
+                loadMoreSection
                     .padding(.bottom, 20)
             }
             .padding(.horizontal)
@@ -156,14 +166,19 @@ struct HomeView: View {
                 .font(.headline)
                 .fontWeight(.bold)
             
-            ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(spacing: 16) {
-                    ForEach(viewModel.trendingTopics) { topic in
-                        trendingTopicCard(topic: topic)
-                            .id(topic.id)
+            if viewModel.trendingTopics.isEmpty && viewModel.isLoading {
+                ProgressView()
+                    .frame(maxWidth: .infinity, minHeight: 120)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(spacing: 16) {
+                        ForEach(viewModel.trendingTopics) { topic in
+                            trendingTopicCard(topic: topic)
+                                .id(topic.id)
+                        }
                     }
+                    .padding(.horizontal)
                 }
-                .padding(.horizontal)
             }
         }
         .padding(.vertical)
@@ -200,8 +215,8 @@ struct HomeView: View {
                 
                 Spacer()
                 
-                // 添加调试信息：当前页码和总条数
-                Text("第\(viewModel.currentPage)页，共\(viewModel.recentTopics.count)条")
+                // 显示条数信息
+                Text("共\(viewModel.recentTopics.count)条")
                     .font(.caption)
                     .foregroundColor(.gray)
             }
@@ -216,7 +231,7 @@ struct HomeView: View {
                     if viewModel.isLoading {
                         ProgressView("加载中...")
                     } else {
-                        Text("未找到匹配的话题")
+                        Text(debouncedSearch.isEmpty ? "暂无话题" : "未找到匹配的话题")
                             .font(.subheadline)
                             .foregroundColor(.gray)
                     }
@@ -232,61 +247,71 @@ struct HomeView: View {
                             .padding(.vertical, 10)
                     }
                     
+                    // 话题列表
                     ForEach(filteredTopics) { topic in
                         TopicCard(topic: topic)
                             .padding(.bottom, 4)
                             .id(topic.id)
                             .onAppear {
-                                // 当显示到列表最后两条时触发加载更多
-                                let index = filteredTopics.firstIndex(where: { $0.id == topic.id }) ?? 0
-                                let threshold = filteredTopics.count - 2
-                                
-                                if index >= threshold && debouncedSearch.isEmpty && !viewModel.isLoadingMore {
+                                // 显示到最后N条数据时预加载
+                                if debouncedSearch.isEmpty &&
+                                   topic.id == filteredTopics[max(0, filteredTopics.count - 3)].id &&
+                                   !viewModel.isLoadingMore {
+                                    Logger.debug("接近最后几条数据，预加载更多")
                                     viewModel.loadMoreTopics()
                                 }
                             }
                     }
-                    
+                }
+            }
+        }
+        .padding(.vertical)
+    }
+    
+    // 加载更多区域
+    private var loadMoreSection: some View {
+        Group {
+            if debouncedSearch.isEmpty {
+                if viewModel.isLoadingMore {
                     // 加载更多指示器
-                    if viewModel.isLoadingMore {
-                        ProgressView("加载更多中...")
-                            .frame(maxWidth: .infinity, alignment: .center)
-                            .padding(.vertical, 10)
-                    } else if !filteredTopics.isEmpty {
-                        // 用于触发底部滚动检测的空白视图
-                        Color.clear
-                            .frame(height: 20)
-                            .onAppear {
-                                if debouncedSearch.isEmpty && !viewModel.isLoadingMore {
-                                    viewModel.loadMoreTopics()
-                                }
-                            }
+                    ProgressView("加载更多中...")
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.vertical, 10)
+                } else if viewModel.hasMoreData {
+                    // 上拉加载更多提示
+                    Button(action: {
+                        viewModel.loadMoreTopics()
+                    }) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "arrow.down.circle")
+                            Text("点击加载更多")
+                        }
+                        .font(.subheadline)
+                        .foregroundColor(.blue)
+                        .frame(maxWidth: .infinity)
+                        .padding(12)
                     }
-                    
-                    // 显示调试信息
+                    .padding(.vertical, 10)
+                    .contentShape(Rectangle())
+                } else {
+                    // 没有更多数据提示
+                    Text("— 已经到底了 —")
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.vertical, 20)
+                }
+                
+                // 调试信息
+                if !viewModel.debugInfo.isEmpty {
                     Text(viewModel.debugInfo)
                         .font(.caption)
                         .foregroundColor(.gray)
                         .frame(maxWidth: .infinity, alignment: .center)
                         .padding(.top, 8)
-                    
-                    // 手动加载按钮（方便测试）
-                    Button(action: {
-                        viewModel.loadMoreTopics()
-                    }) {
-                        Text("手动加载更多")
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.blue)
-                            .foregroundColor(.white)
-                            .cornerRadius(8)
-                    }
-                    .padding(.vertical, 10)
-                    .disabled(viewModel.isLoadingMore)
                 }
             }
         }
-        .padding(.vertical)
     }
     
     // 热门话题卡片
@@ -432,6 +457,7 @@ struct OptimizedScrollView<Content: View>: View {
     // 配置
     var showsIndicator: Bool
     var onStateChange: (Bool) -> Void
+    var onBottomReached: () -> Void  // 新增：滚动到底部的回调
     var content: () -> Content
     
     // 状态
@@ -439,76 +465,111 @@ struct OptimizedScrollView<Content: View>: View {
     @State private var lastOffset: CGFloat = 0
     @State private var initialOffset: CGFloat? = nil
     @State private var lastUpdateTime: Date = Date()
+    @State private var lastBottomReachTime: Date = Date.distantPast
     
     // 滚动相关常量
     private let scrollThreshold: CGFloat = 10
     private let topThreshold: CGFloat = 5
     private let updateThreshold: TimeInterval = 0.08 // 80毫秒节流
+    private let bottomThreshold: CGFloat = 100 // 距离底部多少时触发
+    private let bottomReachThrottle: TimeInterval = 1.0 // 底部触发节流时间
     
     init(
         showsIndicator: Bool = true,
         onStateChange: @escaping (Bool) -> Void,
+        onBottomReached: @escaping () -> Void = {},
         @ViewBuilder content: @escaping () -> Content
     ) {
         self.showsIndicator = showsIndicator
         self.onStateChange = onStateChange
+        self.onBottomReached = onBottomReached
         self.content = content
     }
     
     var body: some View {
-        ScrollView(showsIndicators: showsIndicator) {
-            content()
-                .overlay(
-                    GeometryReader { proxy in
-                        Color.clear
-                            .preference(key: OffsetPreferenceKey.self, value: proxy.frame(in: .global).minY)
-                            .onAppear {
-                                initialOffset = proxy.frame(in: .global).minY
-                            }
-                    }
-                )
-        }
-        .onPreferenceChange(OffsetPreferenceKey.self) { offset in
-            // 确保初始偏移量已设置
-            guard let initialOffset = initialOffset else {
-                self.initialOffset = offset
-                return
+        GeometryReader { outerGeometry in
+            ScrollView(showsIndicators: showsIndicator) {
+                content()
+                    .overlay(
+                        GeometryReader { proxy in
+                            Color.clear
+                                .preference(key: OffsetPreferenceKey.self, value: proxy.frame(in: .global).minY)
+                                .onAppear {
+                                    initialOffset = proxy.frame(in: .global).minY
+                                }
+                                .onChange(of: proxy.frame(in: .global).minY) { newOffset in
+                                    checkBottomReached(
+                                        contentHeight: proxy.size.height,
+                                        outerHeight: outerGeometry.size.height,
+                                        offset: newOffset
+                                    )
+                                }
+                        }
+                    )
             }
-            
-            // 添加节流逻辑
-            let now = Date()
-            guard now.timeIntervalSince(lastUpdateTime) >= updateThreshold else { return }
-            
-            // 计算滑动方向
-            let direction = offset - lastOffset
-            
-            // 判断是否在顶部区域
-            let isAtOrNearTop = offset >= initialOffset - topThreshold
-            
-            // 更新导航栏显示状态
-            if abs(direction) > scrollThreshold {
-                if direction < 0 && isVisible && !isAtOrNearTop {
-                    // 向下滑动且不在顶部区域，隐藏导航栏
-                    isVisible = false
-                    onStateChange(false)
-                    lastUpdateTime = now
-                } else if direction > 0 && !isVisible {
-                    // 向上滑动，显示导航栏
+            .onPreferenceChange(OffsetPreferenceKey.self) { offset in
+                // 确保初始偏移量已设置
+                guard let initialOffset = initialOffset else {
+                    self.initialOffset = offset
+                    return
+                }
+                
+                // 添加节流逻辑
+                let now = Date()
+                guard now.timeIntervalSince(lastUpdateTime) >= updateThreshold else { return }
+                
+                // 计算滑动方向
+                let direction = offset - lastOffset
+                
+                // 判断是否在顶部区域
+                let isAtOrNearTop = offset >= initialOffset - topThreshold
+                
+                // 更新导航栏显示状态
+                if abs(direction) > scrollThreshold {
+                    if direction < 0 && isVisible && !isAtOrNearTop {
+                        // 向下滑动且不在顶部区域，隐藏导航栏
+                        isVisible = false
+                        onStateChange(false)
+                        lastUpdateTime = now
+                    } else if direction > 0 && !isVisible {
+                        // 向上滑动，显示导航栏
+                        isVisible = true
+                        onStateChange(true)
+                        lastUpdateTime = now
+                    }
+                }
+                
+                // 在顶部区域时强制显示导航栏
+                if isAtOrNearTop && !isVisible {
                     isVisible = true
                     onStateChange(true)
                     lastUpdateTime = now
                 }
+                
+                // 更新上次偏移量
+                lastOffset = offset
             }
-            
-            // 在顶部区域时强制显示导航栏
-            if isAtOrNearTop && !isVisible {
-                isVisible = true
-                onStateChange(true)
-                lastUpdateTime = now
+        }
+    }
+    
+    // 检查是否滚动到底部
+    private func checkBottomReached(contentHeight: CGFloat, outerHeight: CGFloat, offset: CGFloat) {
+        let now = Date()
+        
+        // 计算实际偏移量，处理负值问题
+        let initialValue = initialOffset ?? 0
+        let adjustedOffset = initialValue - offset
+        
+        // 计算底部触发阈值
+        let triggerThreshold = contentHeight - outerHeight - bottomThreshold
+        
+        // 当滚动超过阈值且未在节流期内时触发回调
+        if adjustedOffset > triggerThreshold && adjustedOffset > 0 {
+            if now.timeIntervalSince(lastBottomReachTime) >= bottomReachThrottle {
+                lastBottomReachTime = now
+                Logger.debug("触发onBottomReached，内容高度: \(contentHeight), 视图高度: \(outerHeight), 调整后偏移: \(adjustedOffset), 阈值: \(triggerThreshold)")
+                onBottomReached()
             }
-            
-            // 更新上次偏移量
-            lastOffset = offset
         }
     }
 }
@@ -520,248 +581,6 @@ struct OffsetPreferenceKey: PreferenceKey {
         value = nextValue()
     }
 }
-
-// MARK: - TopicCard和其子组件
-struct TopicCard: View {
-    let topic: Topic
-    @State private var isLiked: Bool
-    
-    init(topic: Topic) {
-        self.topic = topic
-        self._isLiked = State(initialValue: topic.isLiked)
-    }
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // 头部
-            TopicCardHeader(
-                authorName: topic.authorName,
-                location: topic.location,
-                isLiked: $isLiked
-            )
-            
-            // 标题和内容
-            TopicCardContent(
-                title: topic.title,
-                content: topic.content,
-                images: topic.images
-            )
-            
-            // 标签
-            if !topic.tags.isEmpty {
-                TopicCardTags(tags: topic.tags)
-            }
-            
-            // 底部信息
-            TopicCardFooter(
-                participantsCount: topic.participantsCount,
-                postedTime: topic.postedTime,
-                distance: topic.distance
-            )
-        }
-        .padding()
-        .background(Color.white)
-        .cornerRadius(12)
-        .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
-    }
-}
-
-struct TopicCardHeader: View {
-    let authorName: String
-    let location: String
-    @Binding var isLiked: Bool
-    
-    var body: some View {
-        HStack(alignment: .center) {
-            // 头像和作者信息
-            HStack(spacing: 8) {
-                Image(systemName: "person.circle.fill")
-                    .resizable()
-                    .frame(width: 40, height: 40)
-                    .foregroundColor(.gray)
-                
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(authorName)
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                    
-                    HStack {
-                        Image(systemName: "location.circle.fill")
-                            .foregroundColor(.gray)
-                            .font(.caption2)
-                        Text(location)
-                            .font(.caption)
-                            .foregroundColor(.gray)
-                    }
-                }
-            }
-            
-            Spacer()
-            
-            // 点赞按钮
-            Button(action: {
-                withAnimation(.spring()) {
-                    isLiked.toggle()
-                }
-            }) {
-                Image(systemName: isLiked ? "heart.fill" : "heart")
-                    .foregroundColor(isLiked ? .red : .gray)
-            }
-        }
-    }
-}
-
-struct TopicCardContent: View {
-    let title: String
-    let content: String
-    let images: [String]
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.headline)
-                .fontWeight(.bold)
-            
-            Text(content)
-                .font(.subheadline)
-                .foregroundColor(.black)
-                .lineLimit(3)
-            
-            // 图片（如果有）
-            if !images.isEmpty {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.gray.opacity(0.2))
-                        .frame(height: 180)
-                    
-                    Image(systemName: "photo")
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(height: 40)
-                        .foregroundColor(.blue)
-                }
-                .frame(maxWidth: .infinity)
-            }
-        }
-    }
-}
-
-struct TopicCardTags: View {
-    let tags: [String]
-    
-    var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            LazyHStack {
-                ForEach(tags, id: \.self) { tag in
-                    Text(tag)
-                        .font(.caption)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(Color.blue.opacity(0.1))
-                        .foregroundColor(.blue)
-                        .cornerRadius(15)
-                }
-            }
-        }
-    }
-}
-
-struct TopicCardFooter: View {
-    let participantsCount: Int
-    let postedTime: String
-    let distance: Double
-    
-    var body: some View {
-        HStack {
-            // 参与人数
-            HStack(spacing: 4) {
-                Image(systemName: "person.2")
-                    .font(.caption)
-                Text("\(participantsCount)人参与")
-                    .font(.caption)
-            }
-            .foregroundColor(.gray)
-            
-            Spacer()
-            
-            // 发布时间
-            HStack(spacing: 4) {
-                Image(systemName: "clock")
-                    .font(.caption)
-                Text(postedTime)
-                    .font(.caption)
-            }
-            .foregroundColor(.gray)
-            
-            Spacer()
-            
-            // 距离
-            HStack(spacing: 4) {
-                Image(systemName: "location")
-                    .font(.caption)
-                Text("\(distance)km")
-                    .font(.caption)
-            }
-            .foregroundColor(.gray)
-        }
-    }
-}
-
-// MARK: - 优化的搜索和筛选组件
-struct SearchAndFilterView: View {
-    @Binding var search: String
-    @State private var isShowingFilter = false
-    
-    var body: some View {
-        HStack(spacing: 8) {
-            // 搜索框
-            HStack {
-                Image(systemName: "magnifyingglass")
-                    .foregroundColor(.gray)
-                    .frame(width: 20)
-                
-                TextField("搜索话题、标签或用户", text: $search)
-                    .padding(.vertical, 2)
-                    .font(.system(size: 14, weight: .regular))
-                    .foregroundColor(.black)
-                    .autocapitalization(.none)
-                    .disableAutocorrection(true)
-            }
-            .padding(8)
-            .background {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color(UIColor.white))
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(Color.gray, lineWidth: 1)
-            }
-            
-            // 筛选按钮
-            Button(action: { isShowingFilter.toggle() }) {
-                Image(systemName: "slider.horizontal.3")
-                    .foregroundColor(.black)
-                    .frame(width: 20, height: 20)
-                    .padding(8)
-                    .background {
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color(UIColor.white))
-                    }
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color.gray, lineWidth: 1)
-                    }
-            }
-        }
-        .padding(.horizontal)
-        .sheet(isPresented: $isShowingFilter) {
-            // 这里应该是筛选视图，但现在用一个占位符
-            Text("筛选选项")
-                .padding()
-        }
-    }
-}
-
 // MARK: - 数据模型
 struct Topic: Identifiable {
     let id: String

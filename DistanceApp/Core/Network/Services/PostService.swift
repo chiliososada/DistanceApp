@@ -156,12 +156,17 @@ struct TopicsResponse: Codable {
 protocol PostServiceProtocol {
     func getTopics(findby: String, max: Int, recency: Int) async throws -> [Topic]
     func getTrendingTopics(max: Int) async throws -> [Topic]
+    func getLastResponseScore() -> Int? // 添加获取最后响应score的方法
 }
+
 
 // MARK: - PostService 实现
 final class PostService: PostServiceProtocol {
     // MARK: - 依赖
     private let apiClient: APIClientProtocol
+    
+    // 存储最后一次响应中的score值
+    private var lastResponseScore: Int?
     
     // MARK: - 初始化
     init(apiClient: APIClientProtocol) {
@@ -177,37 +182,57 @@ final class PostService: PostServiceProtocol {
     ///   - recency: 时间标记，用于分页
     /// - Returns: 转换后的Topic数组
     func getTopics(findby: String, max: Int, recency: Int) async throws -> [Topic] {
-        Logger.debug("调用API获取话题，参数：findby=\(findby), max=\(max), recency=\(recency)")
-        
-        // 调用API获取话题列表
-        let endpoint = APIEndpoint.getTopics(findby: findby, max: max, recency: recency)
-        let response: TopicsResponse = try await apiClient.request(endpoint)
-        
-        // 确保响应状态码正确
-        guard response.code == 0 else {
-            throw PostError.apiError(response.message)
+        do {
+            // 调用API获取话题列表
+            let endpoint = APIEndpoint.getTopics(findby: findby, max: max, recency: recency)
+            let response: TopicsResponse = try await apiClient.request(endpoint)
+            
+            // 确保响应状态码正确
+            guard response.code == 0 else {
+                Logger.error("API返回错误码: \(response.code), 消息: \(response.message)")
+                throw PostError.apiError(response.message)
+            }
+            
+            // 存储score值以便后续使用
+            self.lastResponseScore = response.data.score
+            Logger.debug("获取到score值: \(String(describing: response.data.score))")
+            
+            // 转换为视图模型数据
+            let topics = response.data.topics.map { $0.toTopic() }
+            Logger.debug("成功解析话题数据，共\(topics.count)条")
+            
+            return topics
+        } catch let decodingError as DecodingError {
+            // 详细记录解码错误信息
+            Logger.error("话题数据解码失败: \(decodingError)")
+            throw PostError.decodingError(decodingError)
+        } catch {
+            Logger.error("获取话题失败: \(error.localizedDescription)")
+            throw PostError.networkError(error)
         }
-        
-        Logger.debug("API返回话题数量：\(response.data.topics.count)")
-        
-        // 转换为视图模型数据
-        return response.data.topics.map { $0.toTopic() }
     }
     
     /// 获取热门话题
     /// - Parameter max: 获取数量
     /// - Returns: 转换后的Topic数组
     func getTrendingTopics(max: Int = 10) async throws -> [Topic] {
-        // 获取热门话题，使用trending查找方式
+        // 获取热门话题，使用与recent相同的接口，但查询参数可能不同
+        // 这里使用"recent"而不是"trending"，确保与后端API一致
         return try await getTopics(findby: "recent", max: max, recency: 0)
     }
+    
+    /// 获取最后一次响应中的score值
+    /// - Returns: score值，如果没有则返回nil
+    func getLastResponseScore() -> Int? {
+        return lastResponseScore
+    }
 }
-
 // MARK: - 错误类型
 enum PostError: LocalizedError {
     case apiError(String)
     case invalidResponse
     case networkError(Error)
+    case decodingError(Error)
     
     var errorDescription: String? {
         switch self {
@@ -217,6 +242,8 @@ enum PostError: LocalizedError {
             return "无效的响应数据"
         case .networkError(let error):
             return "网络错误: \(error.localizedDescription)"
+        case .decodingError(let error):
+            return "数据解析错误: \(error.localizedDescription)"
         }
     }
 }
