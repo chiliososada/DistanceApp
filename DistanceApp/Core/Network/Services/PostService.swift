@@ -177,6 +177,8 @@ final class PostService: PostServiceProtocol {
     ///   - recency: 时间标记，用于分页
     /// - Returns: 转换后的Topic数组
     func getTopics(findby: String, max: Int, recency: Int) async throws -> [Topic] {
+        Logger.debug("调用API获取话题，参数：findby=\(findby), max=\(max), recency=\(recency)")
+        
         // 调用API获取话题列表
         let endpoint = APIEndpoint.getTopics(findby: findby, max: max, recency: recency)
         let response: TopicsResponse = try await apiClient.request(endpoint)
@@ -185,6 +187,8 @@ final class PostService: PostServiceProtocol {
         guard response.code == 0 else {
             throw PostError.apiError(response.message)
         }
+        
+        Logger.debug("API返回话题数量：\(response.data.topics.count)")
         
         // 转换为视图模型数据
         return response.data.topics.map { $0.toTopic() }
