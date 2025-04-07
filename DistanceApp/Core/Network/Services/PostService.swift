@@ -79,6 +79,9 @@ struct TopicResponse: Codable {
         // 推导位置描述
         let location = deriveLocationName()
         
+        // 获取图片路径数组
+        let imagePaths = topicImages ?? []
+        
         return Topic(
             id: uid,
             title: title,
@@ -90,7 +93,8 @@ struct TopicResponse: Codable {
             postedTime: postedTime,
             distance: distance,
             isLiked: likesCount > 0, // 这里简单处理，实际可能需要单独API判断
-            images: topicImages ?? []
+            images: topicImages ?? [],
+            firebaseImagePaths: imagePaths  // 新增字段，保存原始路径
         )
     }
     

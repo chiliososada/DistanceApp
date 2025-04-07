@@ -346,54 +346,55 @@ struct HomeView: View {
             ZStack(alignment: .bottomLeading) {
                 // 图片背景
                 if !topic.images.isEmpty {
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.blue.opacity(0.3))
-                        .frame(width: 200, height: 120)
-                        .overlay(
-                            Image(systemName: "photo")
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(width: 40)
-                                .foregroundColor(.white)
-                        )
-                } else {
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.blue.opacity(0.3))
-                        .frame(width: 200, height: 120)
-                }
+                             FirebaseImageView(imagePath: topic.images[0])
+                                 .frame(width: 200, height: 120)
+                                 .clipShape(RoundedRectangle(cornerRadius: 12))
+                                 .overlay(
+                                     LinearGradient(
+                                         gradient: Gradient(colors: [Color.clear, Color.black.opacity(0.5)]),
+                                         startPoint: .top,
+                                         endPoint: .bottom
+                                     )
+                                     .cornerRadius(12)
+                                 )
+                         } else {
+                             RoundedRectangle(cornerRadius: 12)
+                                 .fill(Color.blue.opacity(0.3))
+                                 .frame(width: 200, height: 120)
+                         }
                 
                 // 图片上的渐变遮罩
-                LinearGradient(
-                    gradient: Gradient(colors: [Color.clear, Color.black.opacity(0.5)]),
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .cornerRadius(12)
+//                LinearGradient(
+//                    gradient: Gradient(colors: [Color.clear, Color.black.opacity(0.5)]),
+//                    startPoint: .top,
+//                    endPoint: .bottom
+//                )
+//                .cornerRadius(12)
                 
                 // 底部信息
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(topic.title)
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.white)
-                    
-                    HStack {
-                        Image(systemName: "person.2.fill")
-                            .font(.caption2)
-                        Text("\(topic.participantsCount)人参与")
-                            .font(.caption2)
-                        
-                        Spacer()
-                        
-                        Image(systemName: "mappin.circle.fill")
-                            .font(.caption2)
-                        Text("\(topic.distance)km")
-                            .font(.caption2)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(topic.title)
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.white)
+                            
+                            HStack {
+                                Image(systemName: "person.2.fill")
+                                    .font(.caption2)
+                                Text("\(topic.participantsCount)人参与")
+                                    .font(.caption2)
+                                
+                                Spacer()
+                                
+                                Image(systemName: "mappin.circle.fill")
+                                    .font(.caption2)
+                                Text("\(topic.distance)km")
+                                    .font(.caption2)
+                            }
+                            .foregroundColor(.white.opacity(0.9))
+                        }
+                        .padding(8)
                     }
-                    .foregroundColor(.white.opacity(0.9))
-                }
-                .padding(8)
-            }
             
             // 作者信息
             HStack {
@@ -620,6 +621,8 @@ struct Topic: Identifiable {
     let distance: Double
     var isLiked: Bool
     let images: [String]
+    let firebaseImagePaths: [String]  // 新增字段，保存原始路径
+    var imageURLs: [URL] = []  // 新增字段，保存加载后的URL
 }
 
 struct TopicCategory {

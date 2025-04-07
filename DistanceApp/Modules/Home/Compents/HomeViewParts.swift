@@ -100,6 +100,8 @@ struct TopicCardContent: View {
     let title: String
     let content: String
     let images: [String]
+    @State private var loadedImageURLs: [URL] = []
+    @State private var isLoadingImages = false
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -114,20 +116,116 @@ struct TopicCardContent: View {
             
             // 图片（如果有）
             if !images.isEmpty {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.gray.opacity(0.2))
-                        .frame(height: 180)
+                if isLoadingImages {
+                    // 加载中状态
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Color.gray.opacity(0.2))
+                            .frame(height: 180)
+                        
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle())
+                    }
+                    .frame(maxWidth: .infinity)
+                } else if !loadedImageURLs.isEmpty {
+                    // 显示第一张图片
+                    AsyncImage(url: loadedImageURLs[0]) { phase in
+                        switch phase {
+                        case .empty:
+                            Rectangle()
+                                .fill(Color.gray.opacity(0.2))
+                                .frame(height: 180)
+                                .cornerRadius(8)
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .frame(height: 180)
+                                .cornerRadius(8)
+                                .clipped()
+                        case .failure:
+                            ZStack {
+                                Rectangle()
+                                    .fill(Color.gray.opacity(0.2))
+                                    .frame(height: 180)
+                                    .cornerRadius(8)
+                                
+                                Image(systemName: "exclamationmark.triangle")
+                                    .foregroundColor(.gray)
+                            }
+                        @unknown default:
+                            EmptyView()
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
                     
-                    Image(systemName: "photo")
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(height: 40)
-                        .foregroundColor(.blue)
+                    // 显示图片数量指示器
+                    if loadedImageURLs.count > 1 {
+                        Text("+\(loadedImageURLs.count - 1) 张图片")
+                            .font(.caption)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.black.opacity(0.5))
+                            .cornerRadius(4)
+                            .offset(x: 0, y: -30)
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                            .padding(.trailing, 8)
+                    }
+                } else {
+                    // 默认占位符
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Color.gray.opacity(0.2))
+                            .frame(height: 180)
+                        
+                        Image(systemName: "photo")
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(height: 40)
+                            .foregroundColor(.blue)
+                    }
+                    .frame(maxWidth: .infinity)
                 }
-                .frame(maxWidth: .infinity)
             }
         }
+        .onAppear {
+            loadImagesIfNeeded()
+        }
+    }
+    
+    private func loadImagesIfNeeded() {
+        // 避免重复加载
+        guard !isLoadingImages && loadedImageURLs.isEmpty && !images.isEmpty else {
+            return
+        }
+        
+        isLoadingImages = true
+        
+        Task {
+            // 加载图片URL
+            let urls = await loadImageURLs(for: images)
+            
+            await MainActor.run {
+                loadedImageURLs = urls
+                isLoadingImages = false
+            }
+        }
+    }
+    
+    private func loadImageURLs(for paths: [String]) async -> [URL] {
+        var urls: [URL] = []
+        
+        for path in paths {
+            do {
+                let url = try await FirebaseStorageService.shared.getImageURL(for: path)
+                urls.append(url)
+            } catch {
+                Logger.warning("加载图片URL失败: \(path)")
+            }
+        }
+        
+        return urls
     }
 }
 
