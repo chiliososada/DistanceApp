@@ -153,11 +153,47 @@ struct TopicsResponse: Codable {
 }
 
 // 创建话题响应
+// 在PostService.swift中替换CreateTopicResponse结构体
+
 struct CreateTopicResponse: Codable {
-    let topicId: String
+    let uid: String
+    let createdAt: String
+    let updatedAt: String
+    let userUid: String
+    let title: String
+    let content: String
+    let locationLatitude: Double?
+    let locationLongitude: Double?
+    let likesCount: Int
+    let participantsCount: Int
+    let viewsCount: Int
+    let sharesCount: Int
+    let expiresAt: String
+    let status: String
+    let user: TopicUserResponse
+    let topicImages: [String]?
+    let tags: [String]?
+    let chatId: String?
     
     enum CodingKeys: String, CodingKey {
-        case topicId = "topic_id"
+        case uid
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+        case userUid = "user_uid"
+        case title
+        case content
+        case locationLatitude = "location_latitude"
+        case locationLongitude = "location_longitude"
+        case likesCount = "likes_count"
+        case participantsCount = "participants_count"
+        case viewsCount = "views_count"
+        case sharesCount = "shares_count"
+        case expiresAt = "expires_at"
+        case status
+        case user
+        case topicImages = "topic_images"
+        case tags
+        case chatId = "chat_id"
     }
 }
 
@@ -166,6 +202,7 @@ struct EmptyResponse: Codable {}
 
 // 话题创建请求模型
 struct CreateTopicRequest: Encodable {
+    let uid: String  // 添加前台生成的唯一ID
     let title: String
     let content: String
     let images: [String]
@@ -176,6 +213,7 @@ struct CreateTopicRequest: Encodable {
     
     // 自定义编码
     enum CodingKeys: String, CodingKey {
+        case uid
         case title
         case content
         case images
@@ -188,6 +226,7 @@ struct CreateTopicRequest: Encodable {
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         
+        try container.encode(uid, forKey: .uid)  // 编码新增的uid字段
         try container.encode(title, forKey: .title)
         try container.encode(content, forKey: .content)
         try container.encode(images, forKey: .images)
@@ -209,7 +248,6 @@ struct CreateTopicRequest: Encodable {
         try container.encode(dateString, forKey: .expiresAt)
     }
 }
-
 // MARK: - PostService 协议
 protocol PostServiceProtocol {
     func getTopics(findby: String, max: Int, recency: Int) async throws -> [Topic]
@@ -311,7 +349,7 @@ final class PostService: PostServiceProtocol {
             }
             
             // 记录成功
-            Logger.info("话题创建成功，ID: \(response.data.topicId)")
+            Logger.info("话题创建成功，ID: \(response.data.uid)")
             
         } catch let apiError as APIError {
             Logger.error("创建话题失败 (API错误): \(apiError.localizedDescription)")

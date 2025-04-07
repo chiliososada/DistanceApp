@@ -146,13 +146,15 @@ class CreateTopicViewModel: NSObject, ObservableObject {
         isLoading = true
         
         do {
+            // 生成唯一ID 
+            let uid = UUID().uuidString.lowercased()
+            
             // 准备图片数据
             var imageIds: [String] = []
             
             // 这里应该先上传图片，获取图片ID
             if !selectedImages.isEmpty {
                 // 实际项目中，这里应该调用上传图片的API
-                // 假设API返回图片ID数组
                 imageIds = try await uploadImages()
             }
             
@@ -165,8 +167,9 @@ class CreateTopicViewModel: NSObject, ObservableObject {
                 longitude = currentLongitude
             }
             
-            // 创建话题请求
+            // 创建话题请求，传入新增的uid参数
             let request = CreateTopicRequest(
+                uid: uid,
                 title: title,
                 content: content,
                 images: imageIds,
