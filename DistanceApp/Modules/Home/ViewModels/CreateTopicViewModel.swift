@@ -1,6 +1,8 @@
 import SwiftUI
 import PhotosUI
 import CoreLocation
+import FirebaseStorage // 添加这一行
+
 
 // 修改：让 CreateTopicViewModel 继承自 NSObject 以支持 CLLocationManagerDelegate
 class CreateTopicViewModel: NSObject, ObservableObject {
@@ -146,7 +148,7 @@ class CreateTopicViewModel: NSObject, ObservableObject {
         isLoading = true
         
         do {
-            // 生成唯一ID 
+            // 生成唯一ID
             let uid = UUID().uuidString.lowercased()
             
             // 准备图片数据
@@ -155,7 +157,7 @@ class CreateTopicViewModel: NSObject, ObservableObject {
             // 这里应该先上传图片，获取图片ID
             if !selectedImages.isEmpty {
                 // 实际项目中，这里应该调用上传图片的API
-                imageIds = try await uploadImages()
+                imageIds = try await uploadImages(topicUid: uid)
             }
             
             // 准备位置数据
@@ -197,23 +199,38 @@ class CreateTopicViewModel: NSObject, ObservableObject {
     }
     
     // 上传图片
-    private func uploadImages() async throws -> [String] {
-        // 实际项目中应该调用上传图片的API
-        // 这里使用模拟数据
-        var imageIds: [String] = []
+    private func uploadImages(topicUid: String) async throws -> [String] {
+        let storage = Storage.storage()
+        var imagePaths: [String] = []
         
-        for (index, image) in selectedImages.enumerated() {
-            guard let image = image else { continue }
+        for index in 0..<selectedImages.count {
+            guard let image = selectedImages[index] else { continue }
+            guard let imageData = image.jpegData(compressionQuality: 0.7) else {
+                throw PostError.imageUploadFailed
+            }
+            // 修改上传代码，明确设置ContentType
+            let metadata = StorageMetadata()
+            metadata.contentType = "image/jpeg" // 确保这个值与实际图片类型匹配
+       
+            // 创建图片路径
+            let imagePath = "topics/\(topicUid)/image-\(index)"
+            let storageRef = storage.reference().child(imagePath)
             
-            // 模拟上传延迟
-            try await Task.sleep(nanoseconds: 500_000_000)
-            
-            // 模拟返回图片ID
-            let imageId = "img_\(UUID().uuidString.prefix(8))_\(index)"
-            imageIds.append(imageId)
+            // 上传图片
+            do {
+                _ = try await storageRef.putDataAsync(imageData, metadata: metadata)
+                
+                // 而不是获取下载URL，我们直接使用路径
+                imagePaths.append(imagePath)
+                
+                Logger.debug("成功上传图片: \(imagePath)")
+            } catch {
+                Logger.error("图片上传失败: \(error.localizedDescription)")
+                throw PostError.imageUploadFailed
+            }
         }
         
-        return imageIds
+        return imagePaths
     }
     
     // 重置表单

@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		6830ABEE2D75A1F200085050 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 6830ABED2D75A1F200085050 /* FirebaseAuth */; };
 		6830ABF12D75A28D00085050 /* KeychainAccess in Frameworks */ = {isa = PBXBuildFile; productRef = 6830ABF02D75A28D00085050 /* KeychainAccess */; };
+		68DDD78A2DA3C4BE00CE2DD0 /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = 68DDD7892DA3C4BE00CE2DD0 /* FirebaseStorage */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -49,6 +50,7 @@
 			files = (
 				6830ABF12D75A28D00085050 /* KeychainAccess in Frameworks */,
 				6830ABEE2D75A1F200085050 /* FirebaseAuth in Frameworks */,
+				68DDD78A2DA3C4BE00CE2DD0 /* FirebaseStorage in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -109,6 +111,7 @@
 			packageProductDependencies = (
 				6830ABED2D75A1F200085050 /* FirebaseAuth */,
 				6830ABF02D75A28D00085050 /* KeychainAccess */,
+				68DDD7892DA3C4BE00CE2DD0 /* FirebaseStorage */,
 			);
 			productName = DistanceApp;
 			productReference = 683F94012D758CAE0097036A /* DistanceApp.app */;
@@ -583,6 +586,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 6830ABEF2D75A28D00085050 /* XCRemoteSwiftPackageReference "KeychainAccess" */;
 			productName = KeychainAccess;
+		};
+		68DDD7892DA3C4BE00CE2DD0 /* FirebaseStorage */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 6830ABEC2D75A1F200085050 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseStorage;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
