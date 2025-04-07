@@ -198,32 +198,35 @@ class CreateTopicViewModel: NSObject, ObservableObject {
         }
     }
     
-    // 上传图片 压缩处理没有实装under 500kb
+    // 上传图片 压缩处理under 500kb
     private func uploadImages(topicUid: String) async throws -> [String] {
         let storage = Storage.storage()
         var imagePaths: [String] = []
         
         for index in 0..<selectedImages.count {
             guard let image = selectedImages[index] else { continue }
-            guard let imageData = image.jpegData(compressionQuality: 0.7) else {
+            
+            // 压缩图片到500KB以下
+            guard let compressedImageData = compressImage(image, maxSizeKB: 500) else {
+                Logger.error("图片压缩失败")
                 throw PostError.imageUploadFailed
             }
-        
+            
             let metadata = StorageMetadata()
             metadata.contentType = "image/jpeg"
-       
+            
             // 创建图片路径
             let imagePath = "topics/\(topicUid)/image-\(index)"
             let storageRef = storage.reference().child(imagePath)
             
             // 上传图片
             do {
-                _ = try await storageRef.putDataAsync(imageData, metadata: metadata)
+                _ = try await storageRef.putDataAsync(compressedImageData, metadata: metadata)
                 
                 // 使用路径
                 imagePaths.append(imagePath)
                 
-                Logger.debug("成功上传图片: \(imagePath)")
+                Logger.debug("成功上传图片: \(imagePath), 大小: \(compressedImageData.count / 1024)KB")
             } catch {
                 Logger.error("图片上传失败: \(error.localizedDescription)")
                 throw PostError.imageUploadFailed
@@ -231,6 +234,72 @@ class CreateTopicViewModel: NSObject, ObservableObject {
         }
         
         return imagePaths
+    }
+
+    // 图片压缩方法
+    private func compressImage(_ originalImage: UIImage, maxSizeKB: Int) -> Data? {
+        // 尝试不同的压缩质量
+        var compression: CGFloat = 0.9
+        let maxBytes = maxSizeKB * 1024
+        
+        // 第一次尝试的压缩
+        guard var imageData = originalImage.jpegData(compressionQuality: compression) else {
+            return nil
+        }
+        
+        // 如果已经小于最大大小，直接返回
+        if imageData.count <= maxBytes {
+            return imageData
+        }
+        
+        // 尝试逐步降低质量
+        while imageData.count > maxBytes && compression > 0.1 {
+            compression -= 0.1
+            if let compressedData = originalImage.jpegData(compressionQuality: compression) {
+                imageData = compressedData
+                Logger.debug("压缩质量: \(compression), 大小: \(imageData.count / 1024)KB")
+                
+                if imageData.count <= maxBytes {
+                    return imageData
+                }
+            }
+        }
+        
+        // 如果质量压缩不够，则尝试调整尺寸
+        if imageData.count > maxBytes {
+            var scaleFactor: CGFloat = 0.9
+            var scaledImage = originalImage
+            
+            while imageData.count > maxBytes && scaleFactor > 0.1 {
+                let newWidth = originalImage.size.width * scaleFactor
+                let newHeight = originalImage.size.height * scaleFactor
+                let newSize = CGSize(width: newWidth, height: newHeight)
+                
+                UIGraphicsBeginImageContextWithOptions(newSize, false, originalImage.scale)
+                originalImage.draw(in: CGRect(origin: .zero, size: newSize))
+                if let resizedImage = UIGraphicsGetImageFromCurrentImageContext() {
+                    UIGraphicsEndImageContext()
+                    
+                    scaledImage = resizedImage
+                    if let resizedData = resizedImage.jpegData(compressionQuality: compression) {
+                        imageData = resizedData
+                        Logger.debug("压缩尺寸: \(scaleFactor), 大小: \(imageData.count / 1024)KB")
+                        
+                        if imageData.count <= maxBytes {
+                            return imageData
+                        }
+                    }
+                } else {
+                    UIGraphicsEndImageContext()
+                }
+                
+                scaleFactor -= 0.1
+            }
+        }
+        
+        // 如果所有压缩尝试都失败，返回最后的压缩结果
+        Logger.warning("未能将图片压缩到\(maxSizeKB)KB以下，最终大小: \(imageData.count / 1024)KB")
+        return imageData
     }
     
     // 重置表单
