@@ -109,6 +109,9 @@ struct ContentView: View {
             Text("账户设置页面")
         case .deleteAccount:
             Text("删除账户页面")
+        case .topicDetail(let topicId):
+              // 处理话题详情页导航，需要从HomeViewModel中查找话题数据
+              TopicDetailFromIdView(topicId: topicId)
         }
     }
     

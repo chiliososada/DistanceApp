@@ -3,6 +3,8 @@ import Combine
 
 // MARK: - HomeViewModel
 class HomeViewModel: ObservableObject {
+    
+    static let shared = HomeViewModel(postService: AppEnvironment.shared.postService)
     // 调试选项
     private let isDebug = true
     private func log(_ message: String) {
@@ -37,12 +39,22 @@ class HomeViewModel: ObservableObject {
     
     // 加载初始数据
     func loadInitialData() {
+        // 如果已经有数据且不是刷新状态，避免重复加载
+        if !self.recentTopics.isEmpty && !self.isRefreshing {
+            log("已有数据(\(self.recentTopics.count)条)，跳过初始加载")
+            return
+        }
+        
         log("开始加载初始数据")
         isLoading = true
         hasError = false
         debugInfo = "正在加载初始数据..."
-        currentScore = nil // 重置游标
-        hasMoreData = true // 重置是否有更多数据标志
+        
+        // 只有在真正需要重新加载时才重置分页状态
+        if self.recentTopics.isEmpty {
+            currentScore = nil // 重置游标
+            hasMoreData = true // 重置是否有更多数据标志
+        }
         
         Task {
             do {
@@ -139,6 +151,14 @@ class HomeViewModel: ObservableObject {
                 
                 await MainActor.run {
                     isLoadingMore = false
+                    // 确保hasMoreData按实际情况设置，不要随便重置
+                    if result.isEmpty {
+                        hasMoreData = false
+                        log("没有收到更多数据，设置hasMoreData=false")
+                    } else {
+                        hasMoreData = result.count >= pageSize
+                        log("收到\(result.count)条新数据，hasMoreData=\(hasMoreData)")
+                    }
                     debugInfo = "加载更多完成，共\(recentTopics.count)条数据"
                     log("加载更多完成，新增\(result.count)条，总计\(recentTopics.count)条")
                 }
@@ -146,6 +166,7 @@ class HomeViewModel: ObservableObject {
                 await MainActor.run {
                     errorMessage = error.localizedDescription
                     isLoadingMore = false
+                    // 出错时不要重置hasMoreData
                     hasError = true
                     debugInfo = "加载更多失败: \(error.localizedDescription)"
                     log("加载更多失败: \(error.localizedDescription)")
@@ -232,7 +253,19 @@ class HomeViewModel: ObservableObject {
                 } else {
                     // 将新加载的话题追加到现有列表
                     recentTopics.append(contentsOf: topics)
-                    currentScore = score
+                    
+                    // 保存新的游标，但不要在出错时丢失原有游标
+                    if let newScore = score {
+                        currentScore = newScore
+                        log("更新游标为: \(newScore)")
+                    } else {
+                        // 如果API没有返回新游标但有数据，使用一个估计值
+                        if let lastTopic = topics.last, let lastId = Int(lastTopic.id) {
+                            currentScore = lastId
+                            log("API未返回游标，使用估计值: \(lastId)")
+                        }
+                    }
+                    
                     hasMoreData = topics.count >= pageSize
                     log("加载更多完成: 新增\(topics.count)条，总计\(recentTopics.count)条，新score: \(String(describing: score)), hasMoreData=\(hasMoreData)")
                 }
@@ -241,6 +274,7 @@ class HomeViewModel: ObservableObject {
             return topics
         } catch {
             log("加载更多话题失败: \(error)")
+            // 错误时不要重置hasMoreData，让用户有机会重试
             throw error
         }
     }

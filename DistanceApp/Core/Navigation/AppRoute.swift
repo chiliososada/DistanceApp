@@ -25,7 +25,7 @@ enum AppRoute: Hashable {
     // 在AppRoute枚举中添加
     case completeProfile  // 添加这一行
     
-   // case topicDetail(String) // 话题ID
+    case topicDetail(String) // 话题ID
 }
 
 // 路由标题扩展
@@ -55,6 +55,8 @@ extension AppRoute {
             return "账户设置"
         case .deleteAccount:
             return "删除账户"
+        case .topicDetail:
+            return "话题详情"
      //   case .topicDetail:
        // return "话题详情"
     }

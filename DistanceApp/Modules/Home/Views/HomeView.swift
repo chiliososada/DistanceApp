@@ -4,30 +4,29 @@ import Combine
 // MARK: - HomeView
 struct HomeView: View {
     // 环境对象
-    @EnvironmentObject private var navigationManager: AppNavigationManager
-    @EnvironmentObject private var authManager: AuthManager
-    
-    // ViewModel
-    @StateObject private var viewModel: HomeViewModel
-    
-    // 状态变量
-    @State private var searchText = ""
-    @State private var isNavBarVisible = true
-    @State private var debouncedSearch = ""
-    @State private var searchWorkItem: DispatchWorkItem?
-    
-    // 常量
-    private let navBarHeight: CGFloat = 44
-    private let searchBarHeight: CGFloat = 40
-    private let totalHeaderHeight: CGFloat = 92
-    private let topContentPadding: CGFloat = 100 // 增加额外顶部间距避免遮挡
-    
+      @EnvironmentObject private var navigationManager: AppNavigationManager
+      @EnvironmentObject private var authManager: AuthManager
+      
+      // 使用ObservedObject观察共享的ViewModel实例
+      @ObservedObject private var viewModel = HomeViewModel.shared
+      
+      // 状态变量
+      @State private var searchText = ""
+      @State private var isNavBarVisible = true
+      @State private var debouncedSearch = ""
+      @State private var searchWorkItem: DispatchWorkItem?
+      
+      // 常量
+      private let navBarHeight: CGFloat = 44
+      private let searchBarHeight: CGFloat = 40
+      private let totalHeaderHeight: CGFloat = 92
+      private let topContentPadding: CGFloat = 100 // 增加额外顶部间距避免遮挡
     // 添加初始化方法
-    init() {
-        // 使用环境中注册的PostService
-        let postService = AppEnvironment.shared.postService
-        _viewModel = StateObject(wrappedValue: HomeViewModel(postService: postService))
-    }
+//    init() {
+//        // 使用环境中注册的PostService
+//        let postService = AppEnvironment.shared.postService
+//        _viewModel = StateObject(wrappedValue: HomeViewModel(postService: postService))
+//    }
     
     var body: some View {
         ZStack(alignment: .top) {
@@ -138,12 +137,17 @@ struct HomeView: View {
                 isNavBarVisible = isVisible
             },
             onBottomReached: {
-                // 滚动到底部时触发加载更多
-                if !viewModel.isLoadingMore && !viewModel.isRefreshing && debouncedSearch.isEmpty && viewModel.hasMoreData {
-                    Logger.debug("滚动到底部，触发加载更多")
-                    viewModel.loadMoreTopics()
-                }
-            }
+                  // 滚动到底部时触发加载更多 - 确保条件判断更严格
+                  if !viewModel.isLoadingMore && !viewModel.isRefreshing &&
+                     debouncedSearch.isEmpty && viewModel.hasMoreData {
+                      // 记录调试信息
+                      Logger.debug("滚动到底部，触发加载更多，当前数据: \(viewModel.recentTopics.count)条")
+                      viewModel.loadMoreTopics()
+                  } else {
+                      // 记录为什么不触发加载更多
+                      Logger.debug("滚动到底部，但未触发加载: isLoadingMore=\(viewModel.isLoadingMore), isRefreshing=\(viewModel.isRefreshing), hasSearch=\(!debouncedSearch.isEmpty), hasMoreData=\(viewModel.hasMoreData)")
+                  }
+              }
         ) {
             LazyVStack(spacing: 16) {
                 // 顶部安全区域间距，避免被导航栏遮挡
@@ -303,41 +307,47 @@ struct HomeView: View {
                     ProgressView("加载更多中...")
                         .frame(maxWidth: .infinity, alignment: .center)
                         .padding(.vertical, 10)
-                } else if viewModel.hasMoreData {
-                    // 上拉加载更多提示
-                    Button(action: {
-                        viewModel.loadMoreTopics()
-                    }) {
-                        HStack(spacing: 8) {
-                            Image(systemName: "arrow.down.circle")
-                            Text("点击加载更多")
-                        }
-                        .font(.subheadline)
-                        .foregroundColor(.blue)
-                        .frame(maxWidth: .infinity)
-                        .padding(12)
-                    }
-                    .padding(.vertical, 10)
-                    .contentShape(Rectangle())
-                } else {
+                } else if !viewModel.hasMoreData {
                     // 没有更多数据提示
                     Text("— 已经到底了 —")
                         .font(.caption)
                         .foregroundColor(.gray)
                         .frame(maxWidth: .infinity, alignment: .center)
                         .padding(.vertical, 20)
+                } else {
+                    // 显示上拉加载更多提示
+                    Text("上拉加载更多")
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.vertical, 10)
+                        .onAppear {
+                            // 当这个视图出现时也触发加载，增加触发机会
+                            if !viewModel.isLoadingMore && !viewModel.isRefreshing {
+                                Logger.debug("上拉提示出现，触发加载更多")
+                                viewModel.loadMoreTopics()
+                            }
+                        }
                 }
                 
                 // 调试信息
                 if !viewModel.debugInfo.isEmpty {
-                    Text(viewModel.debugInfo)
-                        .font(.caption)
-                        .foregroundColor(.gray)
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .padding(.top, 8)
+                    VStack(spacing: 4) {
+                        Text(viewModel.debugInfo)
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                        
+                        // 添加更多调试信息
+                        Text("hasMoreData: \(viewModel.hasMoreData ? "是" : "否"), 数据: \(viewModel.recentTopics.count)条")
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.top, 8)
                 }
             }
         }
+        .id("LoadMoreSection") // 添加ID以确保视图正确刷新
     }
     
     // 热门话题卡片

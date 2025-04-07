@@ -10,6 +10,7 @@ import Combine
 struct TopicCard: View {
     let topic: Topic
     @State private var isLiked: Bool
+    @EnvironmentObject private var navigationManager: AppNavigationManager
     
     init(topic: Topic) {
         self.topic = topic
@@ -48,9 +49,24 @@ struct TopicCard: View {
         .background(Color.white)
         .cornerRadius(12)
         .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
+        // 使用Button而不是onTapGesture，以获得更好的点击反馈
+        .buttonStyle(TopicCardButtonStyle())
+        .onTapGesture {
+            Logger.debug("点击了话题卡片: \(topic.id)")
+            // 导航到详情页面
+            navigationManager.navigate(to: .topicDetail(topic.id))
+        }
     }
 }
-
+// 自定义ButtonStyle，提供更好的点击反馈但不改变卡片外观
+struct TopicCardButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(configuration.isPressed ? 0.9 : 1.0)
+            .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
+            .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
+    }
+}
 struct TopicCardHeader: View {
     let authorName: String
     let location: String
