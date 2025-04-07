@@ -198,7 +198,7 @@ class CreateTopicViewModel: NSObject, ObservableObject {
         }
     }
     
-    // 上传图片
+    // 上传图片 压缩处理没有实装under 500kb
     private func uploadImages(topicUid: String) async throws -> [String] {
         let storage = Storage.storage()
         var imagePaths: [String] = []
@@ -208,9 +208,9 @@ class CreateTopicViewModel: NSObject, ObservableObject {
             guard let imageData = image.jpegData(compressionQuality: 0.7) else {
                 throw PostError.imageUploadFailed
             }
-            // 修改上传代码，明确设置ContentType
+        
             let metadata = StorageMetadata()
-            metadata.contentType = "image/jpeg" // 确保这个值与实际图片类型匹配
+            metadata.contentType = "image/jpeg"
        
             // 创建图片路径
             let imagePath = "topics/\(topicUid)/image-\(index)"
@@ -220,7 +220,7 @@ class CreateTopicViewModel: NSObject, ObservableObject {
             do {
                 _ = try await storageRef.putDataAsync(imageData, metadata: metadata)
                 
-                // 而不是获取下载URL，我们直接使用路径
+                // 使用路径
                 imagePaths.append(imagePath)
                 
                 Logger.debug("成功上传图片: \(imagePath)")
