@@ -24,7 +24,13 @@ enum APIEndpoint {
     case checkSession
     case updateProfile(params: [String: Any])
     case signout
+    
+    // Topics Endpoints
     case getTopics(findby: String, max: Int, recency: Int)
+    case createTopic(request: CreateTopicRequest)
+    case likeTopic(id: String)
+    case unlikeTopic(id: String)
+    
     // MARK: - HTTP Headers
     var headers: [String: String] {
         var headers = ["Content-Type": "application/json"]
@@ -36,16 +42,14 @@ enum APIEndpoint {
         switch self {
         case .checkSession:
             return .get
-        case .register, .loginWithFirebaseToken,.getTopics:
+        case .register, .loginWithFirebaseToken, .getTopics, .createTopic, .likeTopic, .unlikeTopic:
             return .post
         case .signout:
             return .post
-        case .updatePassword:
+        case .updatePassword, .updateProfile:
             return .put
         case .deleteAccount:
             return .delete
-        case .updateProfile:
-            return .put
         }
     }
     
@@ -57,7 +61,7 @@ enum APIEndpoint {
             return "/api/v1/login"
         case .signout:
             return "/api/v1/auth/users/signout"
-       // case .login:
+        // case .login:
         //    return "/api/v1/login"
         case .register:
             return "/api/v1/auth/register"
@@ -69,8 +73,16 @@ enum APIEndpoint {
             return "/api/v1/auth/checksession"
         case .updateProfile:
             return "/api/v1/auth/users/updateprofile"
+            
+        // Topics Paths
         case .getTopics:
             return "/api/v1/auth/topics/findby"
+        case .createTopic:
+            return "/api/v1/auth/topics"
+        case .likeTopic(let id):
+            return "/api/v1/auth/topics/\(id)/like"
+        case .unlikeTopic(let id):
+            return "/api/v1/auth/topics/\(id)/unlike"
         }
     }
     
@@ -101,9 +113,15 @@ enum APIEndpoint {
         case .checkSession:
             return nil
             
+        case .createTopic(let request):
+            return request
+            
+        case .likeTopic, .unlikeTopic:
+            return nil
         }
     }
 }
+
 struct DynamicParameters: Encodable {
     private let parameters: [String: Any]
     

@@ -57,8 +57,34 @@ struct HomeView: View {
         .onAppear {
             viewModel.loadInitialData()
         }
+        // 在这里添加浮动操作按钮作为overlay
+           .overlay(alignment: .bottomTrailing) {
+               createTopicButton
+           }
+           // 添加sheet呈现CreateTopicView
+           .sheet(isPresented: $showCreateTopicView) {
+               CreateTopicView()
+                   .interactiveDismissDisabled(true)
+           }
+        
     }
-    
+    // 添加这些属性到HomeView结构体中
+    @State private var showCreateTopicView = false
+
+    // 添加这个计算属性到HomeView结构体中
+    private var createTopicButton: some View {
+        Button(action: {
+            showCreateTopicView = true
+        }) {
+            Image(systemName: "plus")
+                .font(.system(size: 22))
+                .foregroundColor(.white)
+                .frame(width: 60, height: 60)
+                .background(Circle().fill(Color.blue))
+                .shadow(color: Color.black.opacity(0.3), radius: 5, x: 0, y: 2)
+        }
+        .padding([.bottom, .trailing], 20)
+    }
     // 自定义导航栏
     private var customNavigationBar: some View {
         HStack {
@@ -104,7 +130,7 @@ struct HomeView: View {
         .background(Color.white)
     }
     
-    // 主内容区 
+    // 主内容区
     private var mainContent: some View {
         OptimizedScrollView(
             showsIndicator: true,

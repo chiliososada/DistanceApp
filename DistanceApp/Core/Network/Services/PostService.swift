@@ -152,11 +152,76 @@ struct TopicsResponse: Codable {
     let data: TopicsListResponse
 }
 
+// 创建话题响应
+struct CreateTopicResponse: Codable {
+    let topicId: String
+    
+    enum CodingKeys: String, CodingKey {
+        case topicId = "topic_id"
+    }
+}
+
+// 空响应模型
+struct EmptyResponse: Codable {}
+
+// 话题创建请求模型
+struct CreateTopicRequest: Encodable {
+    let title: String
+    let content: String
+    let images: [String]
+    let tags: [String]
+    let latitude: Double?
+    let longitude: Double?
+    let expiresAt: Date
+    
+    // 自定义编码
+    enum CodingKeys: String, CodingKey {
+        case title
+        case content
+        case images
+        case tags
+        case latitude
+        case longitude
+        case expiresAt = "expires_at"
+    }
+    
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        
+        try container.encode(title, forKey: .title)
+        try container.encode(content, forKey: .content)
+        try container.encode(images, forKey: .images)
+        try container.encode(tags, forKey: .tags)
+        
+        // 编码可选字段
+        if let latitude = latitude {
+            try container.encode(latitude, forKey: .latitude)
+        }
+        
+        if let longitude = longitude {
+            try container.encode(longitude, forKey: .longitude)
+        }
+        
+        // 格式化日期
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        let dateString = formatter.string(from: expiresAt)
+        try container.encode(dateString, forKey: .expiresAt)
+    }
+}
+
 // MARK: - PostService 协议
 protocol PostServiceProtocol {
     func getTopics(findby: String, max: Int, recency: Int) async throws -> [Topic]
     func getTrendingTopics(max: Int) async throws -> [Topic]
-    func getLastResponseScore() -> Int? // 添加获取最后响应score的方法
+    func getLastResponseScore() -> Int?
+    
+    // 新增发布话题方法
+    func createTopic(_ request: CreateTopicRequest) async throws
+    
+    // 点赞相关方法
+    func likeTopic(id: String) async throws
+    func unlikeTopic(id: String) async throws
 }
 
 
@@ -226,13 +291,96 @@ final class PostService: PostServiceProtocol {
     func getLastResponseScore() -> Int? {
         return lastResponseScore
     }
+    
+    // MARK: - 新增方法：创建话题
+    
+    /// 创建新话题
+    /// - Parameter request: 创建话题请求
+    func createTopic(_ request: CreateTopicRequest) async throws {
+        // 构造API端点
+        let endpoint = APIEndpoint.createTopic(request: request)
+        
+        do {
+            // 发送创建话题请求
+            let response: APIResponse<CreateTopicResponse> = try await apiClient.request(endpoint)
+            
+            // 验证响应
+            guard response.code == 0 else {
+                Logger.error("创建话题API返回错误: \(response.code), 消息: \(response.message)")
+                throw PostError.apiError(response.message)
+            }
+            
+            // 记录成功
+            Logger.info("话题创建成功，ID: \(response.data.topicId)")
+            
+        } catch let apiError as APIError {
+            Logger.error("创建话题失败 (API错误): \(apiError.localizedDescription)")
+            throw PostError.networkError(apiError)
+        } catch {
+            Logger.error("创建话题失败 (未知错误): \(error.localizedDescription)")
+            throw PostError.networkError(error)
+        }
+    }
+    
+    // MARK: - 新增方法：点赞相关
+    
+    /// 点赞话题
+    /// - Parameter id: 话题ID
+    func likeTopic(id: String) async throws {
+        do {
+            // 构造API端点
+            let endpoint = APIEndpoint.likeTopic(id: id)
+            
+            // 发送请求
+            let response: APIResponse<EmptyResponse> = try await apiClient.request(endpoint)
+            
+            // 验证响应
+            guard response.code == 0 else {
+                Logger.error("点赞话题API返回错误: \(response.code), 消息: \(response.message)")
+                throw PostError.apiError(response.message)
+            }
+            
+            Logger.debug("话题点赞成功，ID: \(id)")
+            
+        } catch {
+            Logger.error("话题点赞失败: \(error.localizedDescription)")
+            throw PostError.networkError(error)
+        }
+    }
+    
+    /// 取消点赞话题
+    /// - Parameter id: 话题ID
+    func unlikeTopic(id: String) async throws {
+        do {
+            // 构造API端点
+            let endpoint = APIEndpoint.unlikeTopic(id: id)
+            
+            // 发送请求
+            let response: APIResponse<EmptyResponse> = try await apiClient.request(endpoint)
+            
+            // 验证响应
+            guard response.code == 0 else {
+                Logger.error("取消点赞话题API返回错误: \(response.code), 消息: \(response.message)")
+                throw PostError.apiError(response.message)
+            }
+            
+            Logger.debug("取消话题点赞成功，ID: \(id)")
+            
+        } catch {
+            Logger.error("取消话题点赞失败: \(error.localizedDescription)")
+            throw PostError.networkError(error)
+        }
+    }
 }
+
 // MARK: - 错误类型
 enum PostError: LocalizedError {
     case apiError(String)
     case invalidResponse
     case networkError(Error)
     case decodingError(Error)
+    case invalidInput(String)
+    case imageUploadFailed
     
     var errorDescription: String? {
         switch self {
@@ -244,6 +392,10 @@ enum PostError: LocalizedError {
             return "网络错误: \(error.localizedDescription)"
         case .decodingError(let error):
             return "数据解析错误: \(error.localizedDescription)"
+        case .invalidInput(let message):
+            return "输入错误: \(message)"
+        case .imageUploadFailed:
+            return "图片上传失败"
         }
     }
 }
